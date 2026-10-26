@@ -1,6 +1,6 @@
 namespace LmCode.Stdlib;
 
-/// <summary>The built-in lmcode standard catalog (v1).</summary>
+/// <summary>The built-in lmcode standard catalog (v2).</summary>
 public static class StandardCatalog
 {
     private static readonly Lazy<HashSet<string>> Canonical = new(() =>
@@ -10,6 +10,8 @@ public static class StandardCatalog
         MathCatalog.RegisterMath(registry);
         CollectionsCatalog.RegisterCollections(registry);
         FileCatalog.RegisterFile(registry);
+        ContainersCatalog.RegisterContainers(registry);
+        JsonCatalog.RegisterJson(registry);
         return registry.Signatures().ToHashSet(StringComparer.Ordinal);
     });
     public static IReadOnlyCollection<string> Signatures => Canonical.Value;
@@ -23,6 +25,8 @@ public static class StandardCatalog
             MathCatalog.RegisterMath(registry);
             CollectionsCatalog.RegisterCollections(registry, defaultOwned: true);
             FileCatalog.RegisterFile(registry);
+            ContainersCatalog.RegisterContainers(registry);
+            JsonCatalog.RegisterJson(registry);
         }
         finally { registry.EndBuiltinRegistration(); }
     }

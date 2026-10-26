@@ -2,8 +2,10 @@
 """Build and exercise all lmcode sample ports against one pinned corpus."""
 
 import argparse
+import hashlib
 import json
 import os
+import runpy
 from pathlib import Path
 import shlex
 import subprocess
@@ -51,6 +53,8 @@ def build_for(lang, repo, env):
         if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
             raise ValueError(f"{key} must be a JSON argv array")
         return value
+    if lang == "go" and (repo / "go.mod").is_file():
+        return ["go", "build", "-o", str(repo / "build/lmcode-go-sample"), "."]
     if (repo / "build.sh").is_file():
         return ["./build.sh"]
     if (repo / "Makefile").is_file():
@@ -71,13 +75,14 @@ def execute(argv, cwd, log, env):
     return code, round(time.monotonic() - started, 2)
 
 
-def run_case(command, bytecode, expected_out, expected_exit, scratch, env, timeout=30):
+def run_case(command, bytecode, expected_out, expected_exit, scratch, env, timeout=30, cwd=None):
+    started = time.monotonic()
     child_env = dict(env, SAMPLE_TMP=str(scratch))
     try:
-        result = subprocess.run([*command, "--dsl", str(bytecode)], env=child_env,
+        result = subprocess.run([*command, "--dsl", str(bytecode)], env=child_env, cwd=cwd,
                                 capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired as error:
-        return {"exit": 124, "stdout": error.stdout or b"", "stderr": b"timeout",
+        return {"exit": 124, "stdout": error.stdout or b"", "stderr": b"timeout", "seconds": round(time.monotonic()-started, 4),
                 "expected_exit": expected_exit, "expected_stdout": expected_out}
     return {
         "exit": result.returncode,
@@ -85,7 +90,30 @@ def run_case(command, bytecode, expected_out, expected_exit, scratch, env, timeo
         "stderr": result.stderr,
         "expected_exit": expected_exit,
         "expected_stdout": expected_out,
+        "seconds": round(time.monotonic()-started, 4),
     }
+
+
+# Immutable released v1 digest, retained solely to identify unported SDKs.
+LEGACY_STD_SHA256 = "cfe31e8b34fdcc33a13e456e80fa9d05a5e6c8fed5b98988abd24ac8570e65e0"
+
+def pinned_std_digest(repo):
+    lock = repo / "sdk.lock"
+    if not lock.exists():
+        return None
+    data = json.loads(lock.read_text())
+    return data.get("sha256", {}).get("std/lmcode-std.schema.json")
+
+
+def legacy_signature_set():
+    audit = runpy.run_path(str(ROOT / "audit.py"))
+    result = set()
+    for area in ("string", "math", "collections", "file"):
+        path = ROOT.parent / "stdlib" / (area + ".schema-fragment.json")
+        if not path.exists():
+            return set()
+        result.update(audit["signatures"](json.loads(path.read_text())))
+    return result
 
 
 def main():
@@ -102,8 +130,11 @@ def main():
         root = Path(env.get("SAMPLE_REPO_ROOT", Path.home() / "repos" / "dsl"))
         state = Path(env.get("SAMPLE_STATE", Path.home() / ".local/state/lmctl/sample-matrix"))
         state.mkdir(parents=True, exist_ok=True)
-        corpus = Path(env.get("SAMPLE_CORPUS", ROOT))
+        corpus = Path(env.get("SAMPLE_CORPUS", ROOT)).expanduser().resolve()
         manifest = json.loads((corpus / "manifest.json").read_text())
+        hooks = runpy.run_path(str(corpus / "run-suite.py"))
+        hooks['check_files'](manifest)
+        hooks['check_compiler']()
         cases = []
         for item in manifest["cases"]:
             cases.append((item["name"], item, corpus / item["bytecode"],
@@ -115,16 +146,36 @@ def main():
         print(f"FAIL setup: {error}", file=sys.stderr)
         return 2
 
-    report = {"ports": {}, "cases": len(cases), "ok": True}
+    report = {"ports": {}, "cases": len(cases), "ok": True, "pending": []}
+    std_path = Path(env.get("SAMPLE_STD_SCHEMA", ROOT.parent / "std/lmcode-std.schema.json"))
+    target_digest = hashlib.sha256(std_path.read_bytes()).hexdigest() if std_path.exists() else None
+    audit = runpy.run_path(str(corpus / "audit.py"))
+    target_std = audit["signatures"](json.loads(std_path.read_text())) if std_path.exists() else set()
+    legacy_std = legacy_signature_set() if target_std else set()
+
+    def pending_port(lang, entry):
+        entry.update(pending=True, reason="released v1 SDK catalog; v2 port pending", ok=False)
+        report["pending"].append(lang)
+        report["ok"] = False
+        print(f"FAIL {lang}: {entry['reason']}")
     actual_by_case = {}
     for lang in LANGS:
-        repo = Path(env.get(f"SAMPLE_{lang.upper()}_DIR", root / f"lmcode-{lang}-sample"))
+        repo = Path(env.get(f"SAMPLE_{lang.upper()}_DIR", root / f"lmcode-{lang}-sample")).expanduser().resolve()
         entry = report["ports"][lang] = {"repo": str(repo), "build": None, "cases": [], "ok": False}
         if not repo.is_dir():
             entry["error"] = "missing repository"
             print(f"FAIL {lang}: missing repository")
             report["ok"] = False
             continue
+        try:
+            pinned_digest = pinned_std_digest(repo)
+        except (OSError, ValueError, TypeError, AttributeError) as error:
+            entry["error"] = "invalid SDK lock: " + str(error)
+            report["ok"] = False
+            print(f"FAIL {lang}: {entry['error']}")
+            continue
+        if target_digest and target_digest != LEGACY_STD_SHA256 and pinned_digest == LEGACY_STD_SHA256:
+            pending_port(lang, entry)
         try:
             build = build_for(lang, repo, env)
             entry["build"] = shlex.join(build)
@@ -143,9 +194,14 @@ def main():
             continue
         try:
             command = command_for(env, lang, repo)
+            if pinned_digest is None and legacy_std and target_std - legacy_std:
+                probe = subprocess.run([*command, "--dsl-signatures"], env=env, cwd=repo, capture_output=True, text=True, timeout=30)
+                observed = set(probe.stdout.splitlines())
+                if probe.returncode == 0 and legacy_std <= observed and not ((target_std - legacy_std) & observed):
+                    pending_port(lang, entry)
             # The port's own protocol and canonical runner are mandatory checks.
-            checker = corpus / "run-suite.py" if lang == LANGS[0] else corpus / "protocol.py"
-            protocol = subprocess.run([sys.executable, str(checker), *command], env=env,
+            checker = corpus / "protocol.py"
+            protocol = subprocess.run([sys.executable, str(checker), *command], env=env, cwd=repo,
                                        capture_output=True, text=True, timeout=120)
             entry["protocol_suite_exit"] = protocol.returncode
             if protocol.returncode:
@@ -154,11 +210,12 @@ def main():
                 report["ok"] = False
             for name, item, bytecode, expected_out, expected_exit in cases:
                 with tempfile.TemporaryDirectory(prefix=f"sample-{lang}-") as scratch:
+                    hooks['prepare_tmp'](scratch)
                     for fixture, content in item.get("fixtures", {}).items():
                         path = Path(scratch) / fixture
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_bytes(bytes.fromhex(content))
-                    observed = run_case(command, bytecode, expected_out, expected_exit, scratch, env, int(item.get("timeout_seconds", 30)))
+                    observed = run_case(command, bytecode, expected_out, expected_exit, scratch, env, int(item.get("timeout_seconds", 30)), cwd=repo)
                 raw_stdout = observed["stdout"]
                 raw_stderr = observed["stderr"]
                 observed.update({"name": name, "stdout": raw_stdout.decode(errors="replace"),
@@ -178,17 +235,31 @@ def main():
             print(f"FAIL {lang}: {error}")
             report["ok"] = False
 
+    if not report["ports"].get("cpp", {}).get("ok"):
+        report["ok"] = False
+        report["reference_error"] = "a current passing C++ reference is required; all-skipped is not success"
     for name, ports in actual_by_case.items():
         values = {(item["exit"], item["stdout_hex"], item["stderr_hex"]) for item in ports.values()}
         if len(values) != 1:
             report["ok"] = False
             report.setdefault("cross_mismatches", []).append(name)
     (state / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    print("\nPROGRAM x SAMPLE MATRIX")
+    print(f'{"program":<38} ' + ' '.join(f'{lang:>7}' for lang in LANGS))
+    for name, _, _, _, _ in cases:
+        row = actual_by_case.get(name, {})
+        values = []
+        for lang in LANGS:
+            good = row.get(lang, {}).get('ok', False) and not report['ports'][lang].get('protocol_suite_exit', 1)
+            values.append('FAIL' if report['ports'][lang].get('pending') else 'PASS' if good else 'FAIL')
+        print(f'{name:<38} ' + ' '.join(f'{value:>7}' for value in values))
     print("\nPORT MATRIX")
     print("port     build  suite  cases")
     for lang, item in report["ports"].items():
-        status = "PASS" if item["ok"] else "FAIL"
+        status = "FAIL" if item.get("pending") else "PASS" if item["ok"] else "FAIL"
         print(f"{lang:<8} {item.get('build_exit', 'FAIL')!s:<6} {item.get('protocol_suite_exit', 'FAIL')!s:<6} {status}")
+    if report["pending"]:
+        print("Cross-port v2 interoperability pending: " + ", ".join(report["pending"]))
     print(json.dumps(report, indent=2))
     return 0 if report["ok"] else 1
 

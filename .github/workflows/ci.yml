@@ -8,7 +8,7 @@ on:
     inputs:
       compiler:
         description: Published lmscript version used by the reference suite
-        default: '0.2.420'
+        default: '0.2.426'
         type: string
 
 permissions:
@@ -19,7 +19,7 @@ jobs:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     env:
-      LMSCRIPT_VERSION: ${{ inputs.compiler || '0.2.420' }}
+      LMSCRIPT_VERSION: ${{ inputs.compiler || '0.2.426' }}
     strategy:
       fail-fast: false
       matrix:

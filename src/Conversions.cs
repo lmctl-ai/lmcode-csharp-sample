@@ -1,4 +1,3 @@
-using System.Globalization;
 using LmCode;
 using LmCode.Stdlib;
 
@@ -6,7 +5,7 @@ namespace Sample;
 
 static class Conversions
 {
-    public static void Register(Registry r, Host host)
+    public static void Register(Registry r)
     {
         r.Function("host_int", ["int"], "int", (_, a) => Value.Int(a[0].AsInt()));
         r.Function("host_float", ["float"], "float", (_, a) => Value.Float(a[0].AsFloat()));
@@ -34,22 +33,22 @@ static class Conversions
         r.Function("host_str_list", ["StrList"], "StrList", (c, a) =>
         {
             var values = new List<VmString>(c.Get<StrList>(a[0].AsObj()).Values) { VmString.FromString("host") };
-            return Value.Object("StrList", c.Insert("StrList", new StrList(values)));
+            return CollectionsCatalog.CreateStrList(c, values);
         });
         r.Function("host_int_list", ["IntList"], "IntList", (c, a) =>
         {
             var values = new List<long>(c.Get<IntList>(a[0].AsObj()).Values) { 9 };
-            return Value.Object("IntList", c.Insert("IntList", new IntList(values)));
+            return CollectionsCatalog.CreateIntList(c, values);
         });
         r.Function("host_float_list", ["FloatList"], "FloatList", (c, a) =>
         {
             var values = new List<double>(c.Get<FloatList>(a[0].AsObj()).Values) { 0.5 };
-            return Value.Object("FloatList", c.Insert("FloatList", new FloatList(values)));
+            return CollectionsCatalog.CreateFloatList(c, values);
         });
         r.Function("host_str_map", ["StrMap"], "StrMap", (c, a) =>
         {
             var source = c.Get<StrMap>(a[0].AsObj());
-            return Value.Object("StrMap", c.Insert("StrMap", new StrMap(source.Entries.Append((VmString.FromString("host"), VmString.FromString("yes"))))));
+            return CollectionsCatalog.CreateStrMap(c, source.Entries.Append((VmString.FromString("host"), VmString.FromString("yes"))));
         });
     }
 

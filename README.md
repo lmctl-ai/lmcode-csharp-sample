@@ -7,7 +7,7 @@ to build it.
 
 ```sh
 python3 --version
-npm install --global @lmctl-ai/lmctl@0.2.420   # Node 24+
+npm install --global @lmctl-ai/lmctl@0.2.426   # Node 24+
 dotnet build src/LmCode.Sample.csproj -c Release
 ./test.sh
 dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true
@@ -46,10 +46,12 @@ dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained
 | Every standard collection, math, string and file signature | 015–024, 037–038, 048 |
 | Located VM/host errors, numeric assertions, application failure | 025–033 |
 | Raw/dedented heredocs and all outer splice types | 046–047 |
-| Malformed bytecode and schema binding rejection | 090–091 |
+| Native byte/int64/float/handle/collection boundaries and VM limits | 049–066 |
+| Typed maps, Stack/Queue/PQ and immutable JSON | 101–108 |
+| Malformed bytecode, schema binding and wrong-handle imports | 090–092 |
 
 The [full canonical matrix](sample-suite/README.md) maps every source, bytecode
-and oracle. All 72 standard and 27 domain/testing signatures are exercised.
+and oracle. All 171 v2 standard signatures and the current domain/testing signatures are exercised.
 [Protocol.cs](src/Protocol.cs) preserves raw note bytes in the result JSON;
 text error messages use the SDK's Unicode error API.
 
@@ -76,3 +78,9 @@ int64 cents. NativeAOT uses the same source and can be checked with the publish
 command above; CI proves Linux, macOS and Windows artifacts.
 
 NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/).
+
+
+Catalog v2 is pinned with the SDK and the canonical 77-case corpus. Published
+compiler 0.2.426 accepts the explicitly merged v2 schema used here; its implicit
+standard bundle is still v1. The SDK separately tests implicit v2 signatures with
+an authoritative compiler-main scratch build. Tests never rewrite oracle files.

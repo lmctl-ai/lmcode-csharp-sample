@@ -46,7 +46,7 @@ sealed class Host
         ObjRef items = Context.Insert("Items", Shop.Items);
         foreach (long cents in new long[] { 125, 250, 375 }) Shop.Items.Values.Add(Money(cents).AsObj());
         TestingCatalog.RegisterTesting(Registry); // Explicit opt-in: raw-byte print and assert_close.
-        Conversions.Register(Registry, this);
+        Conversions.Register(Registry);
 
         // A parameter tuple identifies an overload; int prices are cents, floats are units.
         Registry.Function("money", ["int"], "Money", (_, a) => Money(a[0].AsInt()));
