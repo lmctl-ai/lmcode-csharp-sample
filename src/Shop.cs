@@ -32,6 +32,12 @@ sealed class Host
         return Money((long)cents);
     }
 
+    internal static Money GetMoney(Context context, ObjRef reference)
+    {
+        if (reference.Index < 0) throw Error.Host("money: null handle");
+        return context.Get<Money>(reference);
+    }
+
     public Host()
     {
         Registry.Context("shop", "Shop").Context("ledger", "Ledger");
@@ -40,6 +46,7 @@ sealed class Host
         ObjRef items = Context.Insert("Items", Shop.Items);
         foreach (long cents in new long[] { 125, 250, 375 }) Shop.Items.Values.Add(Money(cents).AsObj());
         TestingCatalog.RegisterTesting(Registry); // Explicit opt-in: raw-byte print and assert_close.
+        Conversions.Register(Registry, this);
 
         // A parameter tuple identifies an overload; int prices are cents, floats are units.
         Registry.Function("money", ["int"], "Money", (_, a) => Money(a[0].AsInt()));
@@ -53,15 +60,15 @@ sealed class Host
         });
 
         // Method callbacks receive Context, receiver handle and ordered tagged arguments.
-        Registry.Method("Money", "amount", [], "int", (c, self, _) => Value.Int(c.Get<Money>(self).Cents));
-        Registry.Method("Money", "currency", [], "Currency", (_, _, _) => Text("USD")); // String-backed enum.
-        Registry.Method("Money", "plus", ["Money"], "Money", (c, self, a) => Money(unchecked(c.Get<Money>(self).Cents + c.Get<Money>(a[0].AsObj()).Cents)));
-        Registry.Method("Money", "minus", ["Money"], "Money", (c, self, a) => Money(unchecked(c.Get<Money>(self).Cents - c.Get<Money>(a[0].AsObj()).Cents)));
-        Registry.Method("Money", "times", ["int"], "Money", (c, self, a) => Money(unchecked(c.Get<Money>(self).Cents * a[0].AsInt())));
-        Registry.Method("Money", "neg", [], "Money", (c, self, _) => Money(unchecked(-c.Get<Money>(self).Cents)));
+        Registry.Method("Money", "amount", [], "int", (c, self, _) => Value.Int(GetMoney(c, self).Cents));
+        Registry.Method("Money", "currency", [], "Currency", (c, self, _) => { GetMoney(c, self); return Text("USD"); }); // String-backed enum.
+        Registry.Method("Money", "plus", ["Money"], "Money", (c, self, a) => Money(unchecked(GetMoney(c, self).Cents + GetMoney(c, a[0].AsObj()).Cents)));
+        Registry.Method("Money", "minus", ["Money"], "Money", (c, self, a) => Money(unchecked(GetMoney(c, self).Cents - GetMoney(c, a[0].AsObj()).Cents)));
+        Registry.Method("Money", "times", ["int"], "Money", (c, self, a) => Money(unchecked(GetMoney(c, self).Cents * a[0].AsInt())));
+        Registry.Method("Money", "neg", [], "Money", (c, self, _) => Money(unchecked(-GetMoney(c, self).Cents)));
         Registry.Method("Money", "set", ["int"], "Money", (c, self, a) =>
         {
-            c.Get<Money>(self).Cents = a[0].AsInt();
+            GetMoney(c, self).Cents = a[0].AsInt();
             return Value.Object("Money", self); // returns:self registers the concrete owner type.
         });
 
@@ -89,7 +96,7 @@ sealed class Host
         Registry.Method("Ledger", "record", ["Money"], "Ledger", (c, self, a) =>
         {
             var ledger = c.Get<Ledger>(self);
-            ledger.Balance = unchecked(ledger.Balance + c.Get<Money>(a[0].AsObj()).Cents);
+            ledger.Balance = unchecked(ledger.Balance + GetMoney(c, a[0].AsObj()).Cents);
             ledger.Entries = unchecked(ledger.Entries + 1);
             return Value.Object("Ledger", self);
         });
