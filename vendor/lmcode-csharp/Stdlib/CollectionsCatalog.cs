@@ -97,6 +97,11 @@ public static class CollectionsCatalog
         RegisterList<IntList, long>(r, "IntList", "int", static x => x.Items, static v => v.AsInt(), Value.Int, static (a, b) => a == b);
         RegisterList<FloatList, double>(r, "FloatList", "float", static x => x.Items, static v => v.AsFloat(), Value.Float, static (a, b) => a == b);
 
+        // Materialize snapshots now: neither side can mutate the other's storage.
+        r.Method("StrMap", "keys", [], "StrList", static (c, self, _) =>
+            CreateStrList(c, c.Get<StrMap>(self).Entries.Select(entry => entry.Key)));
+        r.Method("StrMap", "values", [], "StrList", static (c, self, _) =>
+            CreateStrList(c, c.Get<StrMap>(self).Entries.Select(entry => entry.Value)));
         r.Method("StrMap", "len", [], "int", static (c, self, _) => Value.Int(c.Get<StrMap>(self).Live));
         r.Method("StrMap", "has", ["string"], "bool", static (c, self, a) => c.Get<StrMap>(self).Positions.ContainsKey(a[0].AsStr()) ? Value.Bool(true) : Value.Bool(false));
         r.Method("StrMap", "get", ["string"], "string", static (c, self, a) =>

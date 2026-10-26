@@ -48,10 +48,12 @@ dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained
 | Raw/dedented heredocs and all outer splice types | 046–047 |
 | Native byte/int64/float/handle/collection boundaries and VM limits | 049–066 |
 | Typed maps, Stack/Queue/PQ and immutable JSON | 101–108 |
+| Typed list/map/JSON literals and binding compatibility | 201–205 |
+| Strict Base64/hex and independent map snapshots | 301–305, 311–313 |
 | Malformed bytecode, schema binding and wrong-handle imports | 090–092 |
 
 The [full canonical matrix](sample-suite/README.md) maps every source, bytecode
-and oracle. All 171 v2 standard signatures and the current domain/testing signatures are exercised.
+and oracle. All 181 v3 standard signatures and the current domain/testing signatures are exercised.
 [Protocol.cs](src/Protocol.cs) preserves raw note bytes in the result JSON;
 text error messages use the SDK's Unicode error API.
 
@@ -80,7 +82,25 @@ command above; CI proves Linux, macOS and Windows artifacts.
 NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/).
 
 
-Catalog v2 is pinned with the SDK and the canonical 77-case corpus. Published
-compiler 0.2.426 accepts the explicitly merged v2 schema used here; its implicit
-standard bundle is still v1. The SDK separately tests implicit v2 signatures with
+Catalog v3 is pinned with the SDK and the canonical 90-case corpus. Published
+compiler 0.2.426 accepts the explicitly merged v3 schema used here; its implicit
+standard bundle is still v1. The SDK separately tests implicit v3 signatures with
 an authoritative compiler-main scratch build. Tests never rewrite oracle files.
+
+
+V3 byte codecs operate on raw `VmString` data: Base64 is canonical padded RFC
+4648, hex output is lowercase, and invalid alphabets/padding/whitespace trap.
+Map `keys()`/`values()` return independent mutable snapshots in insertion order.
+Every one of the 181 standard signatures is imported by this corpus.
+
+Public CI runs all 90 pinned programs with exact stdout/exit checks. The
+canonical reproduction checker explicitly reports five literal-source skips
+only when it verifies the compiler's legacy v1 signature digest. For a compiler
+main build, require every source to reproduce:
+
+```sh
+LMSCRIPT_BIN=/path/to/lmscript LMCODE_REQUIRE_LITERAL_COMPILER=1 ./test.sh
+```
+
+Local compiler-main validation reproduces all 90/90 bytecode files; expectations
+remain the unmodified committed C++ reference snapshots.

@@ -1,12 +1,13 @@
 namespace LmCode.Stdlib;
 
-/// <summary>The built-in lmcode standard catalog (v2).</summary>
+/// <summary>The built-in lmcode standard catalog (v3).</summary>
 public static class StandardCatalog
 {
     private static readonly Lazy<HashSet<string>> Canonical = new(() =>
     {
         var registry = new Registry(false);
         StringCatalog.RegisterString(registry);
+        EncodingCatalog.RegisterEncoding(registry);
         MathCatalog.RegisterMath(registry);
         CollectionsCatalog.RegisterCollections(registry);
         FileCatalog.RegisterFile(registry);
@@ -22,6 +23,7 @@ public static class StandardCatalog
         try
         {
             StringCatalog.RegisterString(registry);
+            EncodingCatalog.RegisterEncoding(registry);
             MathCatalog.RegisterMath(registry);
             CollectionsCatalog.RegisterCollections(registry, defaultOwned: true);
             FileCatalog.RegisterFile(registry);

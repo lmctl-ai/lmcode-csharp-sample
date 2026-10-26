@@ -1,6 +1,6 @@
 {
   "repo": "lmctl-ai/lmcode-csharp",
-  "commit": "7729b4061076cee3dd2390b28d66aa87870f72f9",
+  "commit": "952cdfd6fa0db7cea75baad8f1bb1be074f06d04",
   "sha256": {
     "Errors.cs": "235fa55e3330ce762112f13c3bd07c686577d8e5d4bdf974b318636f135edc92",
     "Execution.cs": "b4dc04f97bbaa55dc57fd372be6a7fd62a484db49e615cf2af9f1a53b5869c47",
@@ -9,16 +9,17 @@
     "Program.cs": "85f435fb0ecc23b3bab029046b10372c4b27c862458db02a29d464623372ca97",
     "Properties/AssemblyInfo.cs": "428ac49a5cdcc053553c406a744f8c5521f053387484919d30643ae0ff2538a2",
     "Registry.cs": "6e448a22922fb6fa3e234f661e5068c76d31ea950c42ea970ca29d91efda46d9",
-    "Stdlib/CollectionsCatalog.cs": "4f4dd32ce5044225eb1d7f53f596cea2c79c269615ad34da6b96aa72cdd5ae08",
-    "Stdlib/ContainersCatalog.cs": "a2010b0c35132c6a8abf4e3e0e3b4027d9a4528bee0a1639813e903a7551fdca",
+    "Stdlib/CollectionsCatalog.cs": "b02d86a57b420855ba171e50b60f0f6a712ab17fb02effdb4ef27fc11f60a51c",
+    "Stdlib/ContainersCatalog.cs": "719ac2879c6d949227779a1f6e32c067eed6cc0f89267a749b8cb115a5fa9b73",
+    "Stdlib/EncodingCatalog.cs": "da01b3d9b50517529f07fe92006782180296feeb4a9f68c901d54474f1ea7aa1",
     "Stdlib/FileCatalog.cs": "0e125f653398034d1989c4727bc335cc67758f0b263abe0cd4b8b8c604fb49f0",
     "Stdlib/JsonCatalog.cs": "302316c44720396079ae6fcf54de71c719d76c21d0eeb3dd7e67ed4c70f0680a",
     "Stdlib/MathCatalog.cs": "7a8274cd6bea3815a7fde5e41aa26b3c20c90188dbd97301842742ba8493a746",
-    "Stdlib/StandardCatalog.cs": "f3b8f8452dcd00d615041beb27d19d730a69c2cf663f98da20e8fdb0437a17fa",
+    "Stdlib/StandardCatalog.cs": "649663ee8d34b241d5092d91a82799de308852c397e68317d05d98f4dabe6171",
     "Stdlib/StringCatalog.cs": "f2957cc05edbe32081954a950a03db5fdcea782705dbfee7b0d639b43239cf12",
     "Stdlib/TestingCatalog.cs": "106e172a3385812cd4538537e3a30d6be934b8b4697e7bcc0cab1c8c8d7dec76",
     "Values.cs": "2b4a7fd4f5cd9bb9a1a2cfc5f341a576980525bafb1f9f17c4d59426469fb7dd",
     "Verifier.cs": "d54a76faee81813409d36fe254f116599b48ed8efa3e10ed8494057dc17e01ed",
-    "std/lmcode-std.schema.json": "296d7f66ff462fef3c3fa1f83c3e8889874d8714ceb303237ffac940a16aaaf8"
+    "std/lmcode-std.schema.json": "430588371274f09304d7c05c68819297c71d3ce4884f0e523d8ff19a33aff8af"
   }
 }

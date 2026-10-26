@@ -34,8 +34,8 @@ public static class ContainersCatalog
         r.BeginCompatibilityRegistration();
         try
         {
-            RegisterMap<long>(r, "IntMap", "int", Value.Int, static v => v.AsInt());
-            RegisterMap<double>(r, "FloatMap", "float", Value.Float, static v => v.AsFloat());
+            RegisterMap<long>(r, "IntMap", "int", Value.Int, static v => v.AsInt(), CollectionsCatalog.CreateIntList);
+            RegisterMap<double>(r, "FloatMap", "float", Value.Float, static v => v.AsFloat(), CollectionsCatalog.CreateFloatList);
             RegisterStack<long>(r, "IntStack", "int", Value.Int, static v => v.AsInt());
             RegisterStack<double>(r, "FloatStack", "float", Value.Float, static v => v.AsFloat());
             RegisterStack<VmString>(r, "StrStack", "string", Value.Str, static v => v.AsStr());
@@ -52,9 +52,13 @@ public static class ContainersCatalog
     private static ObjRef Allocate<T>(Context c, string type, T value) where T : class
         => CollectionsCatalog.Allocate(c, type, value);
 
-    private static void RegisterMap<T>(Registry r, string type, string element, Func<T, Value> put, Func<Value, T> get)
+    private static void RegisterMap<T>(Registry r, string type, string element, Func<T, Value> put, Func<Value, T> get, Func<Context, IEnumerable<T>, Value> snapshot)
     {
         r.Function(type[..^3].ToLowerInvariant() + "_map", [], type, (c, _) => Value.Object(type, Allocate(c, type, new Map<T>())));
+        r.Method(type, "keys", [], "StrList", (c, self, _) =>
+            CollectionsCatalog.CreateStrList(c, c.Get<Map<T>>(self).Items.Select(entry => entry.Key)));
+        r.Method(type, "values", [], element == "int" ? "IntList" : "FloatList", (c, self, _) =>
+            snapshot(c, c.Get<Map<T>>(self).Items.Select(entry => entry.Value)));
         r.Method(type, "len", [], "int", (c, self, _) => Value.Int(c.Get<Map<T>>(self).Items.Count));
         r.Method(type, "has", ["string"], "bool", (c, self, a) => Value.Bool(c.Get<Map<T>>(self).Find(a[0].AsStr()) >= 0));
         r.Method(type, "get", ["string"], element, (c, self, a) =>
