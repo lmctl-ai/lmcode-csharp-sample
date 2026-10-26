@@ -6,8 +6,11 @@ portable corpus in [sample-suite](sample-suite); no sibling checkout is needed
 to build it.
 
 ```sh
+python3 --version
+npm install --global @lmctl-ai/lmctl@0.2.420   # Node 24+
 dotnet build src/LmCode.Sample.csproj -c Release
 ./test.sh
+dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true
 ```
 
 ## Write a host in C# in ten steps
@@ -17,10 +20,12 @@ dotnet build src/LmCode.Sample.csproj -c Release
 2. Start with [host.schema.json](sample-suite/host.schema.json); it declares
    contexts, object types, overloads, operators and the `Currency` enum.
 3. Add a .NET 8 executable project referencing `vendor/lmcode-csharp/LmCode.csproj`.
-4. Register contexts and callbacks with `Registry.Context`, `Function` and
+4. Read [the domain model](src/Shop.cs) and [the CLI](src/Program.cs), then
+   register contexts and callbacks with `Registry.Context`, `Function` and
    `Method`; signatures must match the schema exactly.
 5. Keep handles in `Context`: call `SetObject` for owned objects and use
-   `Context.Get<T>` inside callbacks. Do not expose raw pointers.
+   `Context.Get<T>` inside callbacks. `Context` owns the slots; the registry
+   only owns callback declarations.
 6. Map values explicitly: `Value.Int`, `Value.Float`, `Value.Bool`,
    `Value.Str(VmString.FromString(...))`, `Value.Object`, or `Value.None`.
 7. Treat `VmString` as bytes. Use `Span` for byte-preserving operations and
@@ -46,9 +51,9 @@ forms (046–047). Cases 090–091 verify malformed bytecode and schema binding.
 |---|---|---|
 | `string` | `VmString` | Preserve raw bytes; decode UTF-8 deliberately. |
 | `int` | `long` | Signed 64-bit two's-complement arithmetic wraps. |
-| `float` | `double` | Use invariant formatting and finite values. |
+| `float` | `double` | Preserve signed zero and non-finite values; format with invariant `G15`. |
 | `bool` | `bool` | Convert only through `Value.AsBool()`. |
-| object handle | `ObjRef` + `Context.Get<T>` | Registry owns the type-safe object slot. |
+| object handle | `ObjRef` + `Context.Get<T>` | `Context` owns the type-safe object slot. |
 | list/map | SDK collection handles | Fresh per run; callbacks return `Value.Object`. |
 | void | `Value.None` | Never substitute a null object. |
 | host/VM error | `LmCode.Error` | Preserve code and source location at the boundary. |
@@ -56,3 +61,8 @@ forms (046–047). Cases 090–091 verify malformed bytecode and schema binding.
 The canonical corpus and expected outputs are vendored snapshots. Update them
 only after a reviewed change in `lmctl-ai/lmcode-cpp`; never edit an expected
 output in this repository to make a failing host appear green.
+
+The Money float overload is deliberately narrower than a general lmcode float:
+it accepts finite, in-range units and rounds half away from zero to signed
+int64 cents. NativeAOT uses the same source and can be checked with the publish
+command above; CI proves Linux, macOS and Windows artifacts.

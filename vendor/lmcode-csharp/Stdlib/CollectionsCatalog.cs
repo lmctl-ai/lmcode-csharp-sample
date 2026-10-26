@@ -3,9 +3,27 @@ using System.Runtime.CompilerServices;
 
 namespace LmCode.Stdlib;
 
-public sealed class StrList { internal readonly List<VmString> Items = []; public IReadOnlyList<VmString> Values => Items; }
-public sealed class IntList { internal readonly List<long> Items = []; public IReadOnlyList<long> Values => Items; }
-public sealed class FloatList { internal readonly List<double> Items = []; public IReadOnlyList<double> Values => Items; }
+public sealed class StrList
+{
+    internal readonly List<VmString> Items;
+    public StrList() : this([]) { }
+    public StrList(IEnumerable<VmString> values) => Items = new(values ?? throw new ArgumentNullException(nameof(values)));
+    public IReadOnlyList<VmString> Values => Items;
+}
+public sealed class IntList
+{
+    internal readonly List<long> Items;
+    public IntList() : this([]) { }
+    public IntList(IEnumerable<long> values) => Items = new(values ?? throw new ArgumentNullException(nameof(values)));
+    public IReadOnlyList<long> Values => Items;
+}
+public sealed class FloatList
+{
+    internal readonly List<double> Items;
+    public FloatList() : this([]) { }
+    public FloatList(IEnumerable<double> values) => Items = new(values ?? throw new ArgumentNullException(nameof(values)));
+    public IReadOnlyList<double> Values => Items;
+}
 public sealed class StrMap
 {
     internal readonly List<(VmString Key, VmString Value)> Items = [];
@@ -14,6 +32,20 @@ public sealed class StrMap
     internal int Live;
     internal bool Dirty;
     internal int[] Fenwick = [0];
+    public StrMap() { }
+    public StrMap(IEnumerable<(VmString Key, VmString Value)> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        foreach (var (key, value) in entries)
+        {
+            if (Positions.TryGetValue(key, out int index)) Items[index] = (key, value);
+            else { Positions.Add(key, Items.Count); Items.Add((key, value)); }
+        }
+        Live = Items.Count;
+        Fenwick = new int[Items.Count + 1];
+        FenwickCount = Fenwick.Length;
+        for (int i = 1; i < Fenwick.Length; ++i) Fenwick[i] = i & -i;
+    }
     public IReadOnlyList<(VmString Key, VmString Value)> Entries => new EntryView(this);
     private sealed class EntryView(StrMap map) : IReadOnlyList<(VmString Key, VmString Value)>
     {
