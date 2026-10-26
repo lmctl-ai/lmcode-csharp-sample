@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+.dotnet/
+artifacts/
+*.user
+*.suo
+__pycache__/
+*.pyc

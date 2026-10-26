@@ -1,0 +1,53 @@
+name: C# sample
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      compiler:
+        description: Published lmscript version used by the reference suite
+        default: '0.2.420'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    env:
+      LMSCRIPT_VERSION: ${{ inputs.compiler || '0.2.420' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, label: linux-x64, rid: linux-x64}
+          - {os: macos-15, label: macos-arm64, rid: osx-arm64}
+          - {os: windows-2022, label: windows-x64, rid: win-x64}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install pinned compiler
+        run: npm install --global "@lmctl-ai/lmctl@$LMSCRIPT_VERSION"
+      - name: Managed host and full corpus
+        run: ./test.sh
+      - name: NativeAOT publish
+        run: dotnet publish src/LmCode.Sample.csproj -c Release -r "${{ matrix.rid }}" --self-contained true -p:PublishAot=true -p:StripSymbols=true -o artifacts/native
+      - name: NativeAOT corpus
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then native="artifacts/native/lmcode-csharp-sample.exe"; else native="artifacts/native/lmcode-csharp-sample"; fi
+          test -x "$native" || test -f "$native"
+          python3 -B sample-suite/run-suite.py "$PWD/$native"
