@@ -39,11 +39,19 @@ dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained
 
 ## Feature coverage
 
-The host covers the same 50 corpus cases as the C++ reference: primitive
-control flow (001–008), Money/Shop/Ledger objects and overloads (009–014,
-034–045), every standard collection/math/string/file operation (015–024,
-037–038, 048), errors and application failures (025–033), and heredoc/splice
-forms (046–047). Cases 090–091 verify malformed bytecode and schema binding.
+| Feature | Corpus programs |
+|---|---|
+| Literals, arithmetic, conditions, loops, functions, switches | 001–008, 036, 039, 041–045 |
+| Overloads, objects, enums, operators, conversions, fluent and void methods | 009–014, 034–035, 040 |
+| Every standard collection, math, string and file signature | 015–024, 037–038, 048 |
+| Located VM/host errors, numeric assertions, application failure | 025–033 |
+| Raw/dedented heredocs and all outer splice types | 046–047 |
+| Malformed bytecode and schema binding rejection | 090–091 |
+
+The [full canonical matrix](sample-suite/README.md) maps every source, bytecode
+and oracle. All 72 standard and 27 domain/testing signatures are exercised.
+[Protocol.cs](src/Protocol.cs) preserves raw note bytes in the result JSON;
+text error messages use the SDK's Unicode error API.
 
 ## Conversions
 
@@ -66,3 +74,5 @@ The Money float overload is deliberately narrower than a general lmcode float:
 it accepts finite, in-range units and rounds half away from zero to signed
 int64 cents. NativeAOT uses the same source and can be checked with the publish
 command above; CI proves Linux, macOS and Windows artifacts.
+
+NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/).

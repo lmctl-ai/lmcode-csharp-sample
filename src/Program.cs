@@ -50,7 +50,7 @@ try
     try { program.Run(host.Context, host.Registry); }
     catch (Error error) { return Reports.ReportError("run", error); }
     if (host.Ledger.Balance < 0) return Reports.ReportAppFailure("ledger: negative balance");
-    return Reports.ReportOk($"{{\"balance\": {host.Ledger.Balance}, \"entries\": {host.Ledger.Entries}, \"note\": {Reports.JsonEscape(host.Ledger.Note.ToString())}}}");
+    return Protocol.Success(host.Ledger);
 }
 catch (Exception)
 {

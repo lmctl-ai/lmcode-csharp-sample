@@ -17,6 +17,7 @@ def hashes(directory):
     return {p.relative_to(directory).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in files(directory)}
 
 def copy_tree(source, destination):
+    if destination.exists(): shutil.rmtree(destination)
     destination.mkdir(parents=True, exist_ok=True)
     for path in files(source):
         target = destination / path.relative_to(source)
