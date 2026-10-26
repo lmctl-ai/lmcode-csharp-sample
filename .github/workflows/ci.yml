@@ -51,3 +51,4 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then native="artifacts/native/lmcode-csharp-sample.exe"; else native="artifacts/native/lmcode-csharp-sample"; fi
           test -x "$native" || test -f "$native"
           python3 -B sample-suite/run-suite.py "$PWD/$native"
+          python3 -B scripts/check-note-bytes.py "$PWD/$native"
