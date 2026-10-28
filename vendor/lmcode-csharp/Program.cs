@@ -27,19 +27,29 @@ internal sealed class Reader(byte[] bytes)
 }
 public sealed record Local(string TypeName, bool Hidden);
 public sealed record Line(int Pc, uint Number, ushort Column);
+public sealed record Entry(string Name, string Annotation, string Iface, IReadOnlyList<string> Params, string Returns);
 public sealed partial class Program
 {
-    public const ushort Version = 5;
-    private readonly List<VmString> consts = [];
-    private readonly List<Binding> imports = [];
-    private readonly List<string> contexts = [];
+    public const ushort Version = 6;
+    private List<VmString> consts = [];
+    private List<Binding> imports = [];
+    private List<string> contexts = [];
     private readonly List<Local> locals = [];
     private readonly List<Line> lines = [];
     private readonly Dictionary<int, (int Counter, int End)> loops = [];
     private byte[] code = [];
     private ushort maxStack;
     private Registry? boundRegistry;
+    private readonly List<(Entry Metadata, Program Region)> entries = [];
+    public IReadOnlyList<Entry> Entries => Array.AsReadOnly(entries.Select(e => e.Metadata).ToArray());
     private Program() { }
+    public Value Call(int entry, Context context, Registry registry, IReadOnlyList<Value> args)
+    {
+        if (entry < 0 || entry >= entries.Count) throw Error.Host($"call entry index {entry} out of range ({entries.Count} entries)");
+        var rule = entries[entry];
+        if (args.Count != rule.Metadata.Params.Count) throw Error.Host($"call entry '{rule.Metadata.Name}' expects {rule.Metadata.Params.Count} argument(s); found {args.Count}");
+        return rule.Region.Execute(context, registry, args, rule.Metadata.Returns != "void");
+    }
     public int ConstantCount => consts.Count;
     public int ImportCount => imports.Count;
     public int LocalCount => locals.Count;
@@ -91,22 +101,60 @@ public sealed partial class Program
             if (declared != type) throw new Error("LOAD_UNBOUND", $"context variable '{name}' is declared as {type} by the bytecode, the host provides {declared}");
             p.contexts.Add(name);
         }
-        count = r.U16();
-        for (uint i = 0; i < count; i++)
+        void ReadRegion(Program region)
         {
-            string type = Constant(r.U32(), "local type"); byte hidden = r.U8();
-            if (hidden > 1) throw Error.BadBytecode($"local {i} hidden flag must be 0 or 1");
-            p.locals.Add(new(type, hidden == 1));
+            uint count = r.U16();
+            for (uint i = 0; i < count; i++)
+            {
+                string type = Constant(r.U32(), "local type"); byte hidden = r.U8();
+                if (hidden > 1) throw Error.BadBytecode($"local {i} hidden flag must be 0 or 1");
+                region.locals.Add(new(type, hidden == 1));
+            }
+            region.maxStack = r.U16(); region.code = r.Bytes(r.U32()); count = r.U32();
+            for (uint i = 0; i < count; i++)
+            {
+                uint pc = r.U32(), line = r.U32(); ushort column = r.U16();
+                if (pc > int.MaxValue) throw Error.BadBytecode($"line table entry points at pc {pc}, beyond the code");
+                if (region.lines.Count > 0 && pc < region.lines[^1].Pc) throw Error.BadBytecode($"line table is not sorted by pc at entry {i}");
+                region.lines.Add(new((int)pc, line, column));
+            }
         }
-        p.maxStack = r.U16(); p.code = r.Bytes(r.U32()); count = r.U32();
-        for (uint i = 0; i < count; i++)
+        ReadRegion(p); p.boundRegistry = registry; p.Verify();
+        int entryCount = r.U16();
+        for (int i = 0; i < entryCount; i++)
         {
-            uint pc = r.U32(), line = r.U32(); ushort column = r.U16();
-            if (pc > int.MaxValue) throw Error.BadBytecode($"line table entry points at pc {pc}, beyond the code");
-            if (p.lines.Count > 0 && pc < p.lines[^1].Pc) throw Error.BadBytecode($"line table is not sorted by pc at entry {i}");
-            p.lines.Add(new((int)pc, line, column));
+            string name = "<" + i + ">";
+            try
+            {
+                name = Constant(r.U32(), "entry name");
+                string annotation = Constant(r.U32(), "entry annotation"), iface = Constant(r.U32(), "entry interface");
+                int nparams = r.U16();
+                var region = new Program { consts = p.consts, imports = p.imports, contexts = p.contexts, boundRegistry = registry };
+                ReadRegion(region);
+                if (nparams > region.locals.Count) throw Error.BadBytecode($"nparams {nparams} exceeds nlocals {region.locals.Count}");
+                var match = System.Text.RegularExpressions.Regex.Match(iface, @"\Ainterface ([A-Za-z_][A-Za-z0-9_]*)\(([^()]*)\) -> ([A-Za-z_][A-Za-z0-9_]*)\z");
+                if (!match.Success) throw Error.BadBytecode($"interface '{iface}' is not an interface signature");
+                string[] parameters = match.Groups[2].Value.Length == 0 ? [] : match.Groups[2].Value.Split(", ", StringSplitOptions.None);
+                if (parameters.Any(t => !System.Text.RegularExpressions.Regex.IsMatch(t, @"\A[A-Za-z_][A-Za-z0-9_]*\z"))) throw Error.BadBytecode($"interface '{iface}' is not an interface signature");
+                if (nparams != parameters.Length) throw Error.BadBytecode($"entry '{name}' declares {nparams} parameter(s); {iface} has {parameters.Length}");
+                for (int j = 0; j < nparams; j++)
+                {
+                    var local = region.locals[j];
+                    if (local.Hidden) throw Error.BadBytecode($"entry '{name}' parameter {j + 1} is hidden");
+                    if (local.TypeName != parameters[j]) throw Error.BadBytecode($"entry '{name}' parameter {j + 1} has type {local.TypeName}; the interface expects {parameters[j]}");
+                }
+                string returns = match.Groups[3].Value;
+                region.Verify(returns == "void" ? 0 : 1, returns);
+                p.entries.Add((new Entry(name, annotation, iface, Array.AsReadOnly(parameters), returns), region));
+            }
+            catch (Error e)
+            {
+                string prefix = $"entry '{name}'", detail = e.Message;
+                if (detail.StartsWith("control flow target", StringComparison.Ordinal)) detail = "jump " + detail;
+                throw Error.BadBytecode(detail.StartsWith(prefix, StringComparison.Ordinal) ? detail : prefix + ": " + detail);
+            }
         }
-        if (!r.Done) throw Error.BadBytecode($"bytecode has {bytecode.Length - r.Pos} trailing byte(s) after the line table");
-        p.boundRegistry = registry; p.Verify(); return p;
+        if (!r.Done) throw Error.BadBytecode($"bytecode has {bytecode.Length - r.Pos} trailing byte(s) after the entries");
+        return p;
     }
 }

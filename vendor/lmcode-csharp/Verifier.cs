@@ -5,7 +5,7 @@ namespace LmCode;
 
 public sealed partial class Program
 {
-    private void Verify()
+    private void Verify(int haltDepth = -1, string returns = "")
     {
         var starts = new List<int>();
         var jumps = new List<(int At, int Target, bool Ordinary)>();
@@ -172,10 +172,10 @@ public sealed partial class Program
         }
         foreach (var line in lines)
             if (line.Pc >= code.Length) throw Error.BadBytecode($"line table entry points at pc {line.Pc}, beyond the code");
-        VerifyStack();
+        VerifyStack(haltDepth, returns);
     }
 
-    private void VerifyStack()
+    private void VerifyStack(int haltDepth, string returns)
     {
         // The full stack walk is implemented in the same form as the reference: decode all instruction starts,
         // propagate operand depth over reachable fallthrough/branch edges, and reject underflow or mismatched joins.
@@ -201,7 +201,7 @@ public sealed partial class Program
                 case Op.MATH: r.U8(); break;
             }
         }
-        if (!hasLoop) return;
+        if (!hasLoop && haltDepth < 0) return;
         if (starts.Count == 0) throw Error.BadBytecode("code is empty");
         var incoming = new long?[starts.Count]; var work = new Stack<int>(); incoming[0] = 0; work.Push(0);
         void Merge(int target, long depth)
@@ -232,6 +232,7 @@ public sealed partial class Program
                 case Op.HALT: fall = false; break;
             }
             long depth = incoming[ix]!.Value; if (depth < pop) throw Error.BadBytecode($"operand stack underflow at offset {pc}"); long after = depth - pop + push;
+            if (op == Op.HALT && haltDepth >= 0 && after != haltDepth) throw Error.BadBytecode($"HALT leaves {after} values, interface returns {returns}");
             foreach (int target in targets) Merge(target, after);
             if (fall) { if (ix + 1 >= starts.Count) throw Error.BadBytecode("control flow falls past the end of code"); Merge(starts[ix + 1], after); }
         }

@@ -29,13 +29,16 @@ public sealed partial class Program
     private static double Max(double a, double b) => double.IsNaN(a) ? a : double.IsNaN(b) ? b : a > b ? a : b > a ? b : a;
     private static bool Equal(Value a, Value b) { if (a.Kind != b.Kind) throw new Error("RUN_ERROR", $"cannot compare {a.KindName} with {b.KindName}"); return a.Kind switch { ValueKind.None => true, ValueKind.Int => a.AsInt() == b.AsInt(), ValueKind.Float => a.AsFloat() == b.AsFloat(), ValueKind.Str => a.AsStr().Equals(b.AsStr()), ValueKind.Bool => a.AsBool() == b.AsBool(), ValueKind.Obj => a.AsObj().Equals(b.AsObj()), _ => false }; }
 
-    public void Run(Context context, Registry registry)
+    public void Run(Context context, Registry registry) { _ = Execute(context, registry, Array.Empty<Value>(), false); }
+
+    private Value Execute(Context context, Registry registry, IReadOnlyList<Value> arguments, bool captureResult)
     {
         Registry owner = boundRegistry ?? registry;
         owner.EnterRun(context);
         try
         {
         var stack = new List<Value>(); var values = new Value[locals.Count]; var reader = new Reader(code);
+        for (int i = 0; i < arguments.Count; i++) values[i] = arguments[i];
         while (!reader.Done)
         {
             int faultPc = reader.Pos;
@@ -61,7 +64,7 @@ public sealed partial class Program
                     case Op.JUMP_IF_TRUE: { int d = reader.I32(); if (Condition(stack)) reader.Pos = checked(reader.Pos + d); break; }
                     case Op.DUP: if (stack.Count == 0) throw new Error("RUN_ERROR", "stack underflow"); stack.Add(stack[^1]); break;
                     case Op.POP: _ = Pop(stack); break;
-                    case Op.HALT: return;
+                    case Op.HALT: return captureResult ? Pop(stack) : Value.None;
                     case Op.ADD_I: BinI(stack, (a, b) => unchecked(a + b)); break;
                     case Op.SUB_I: BinI(stack, (a, b) => unchecked(a - b)); break;
                     case Op.MUL_I: BinI(stack, (a, b) => unchecked(a * b)); break;
@@ -99,6 +102,7 @@ public sealed partial class Program
         }
         }
         finally { owner.ExitRun(context); }
+        return Value.None;
     }
     private static Value Unary(List<Value> stack, ValueKind kind, string operation)
     {
