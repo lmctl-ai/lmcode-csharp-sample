@@ -38,6 +38,14 @@ sealed class Host
         return context.Get<Money>(reference);
     }
 
+    private Value Total(Context context, Shop shop)
+    {
+        long total = 0;
+        foreach (ObjRef item in shop.Items.Values) total = unchecked(total + context.Get<Money>(item).Cents);
+        return Money(total);
+    }
+    public Value TotalHandle() => Total(Context, Shop);
+
     public Host()
     {
         Registry.Context("shop", "Shop").Context("ledger", "Ledger");
@@ -82,12 +90,7 @@ sealed class Host
             return Value.Object("Money", values[(int)index]);
         });
         Registry.Method("Shop", "items", [], "Items", (_, _, _) => Value.Object("Items", items));
-        Registry.Method("Shop", "total", [], "Money", (c, self, _) =>
-        {
-            long total = 0;
-            foreach (ObjRef item in c.Get<Shop>(self).Items.Values) total = unchecked(total + c.Get<Money>(item).Cents);
-            return Money(total);
-        });
+        Registry.Method("Shop", "total", [], "Money", (c, self, _) => Total(c, c.Get<Shop>(self)));
         Registry.Method("Shop", "price", ["int"], "Money", (_, _, a) => Money(a[0].AsInt()));
         Registry.Method("Shop", "price", ["float"], "Money", (_, _, a) => Units(a[0].AsFloat()));
         Registry.Method("Shop", "currency", [], "Currency", (_, _, _) => Text("USD"));

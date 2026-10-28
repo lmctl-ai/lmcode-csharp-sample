@@ -49,8 +49,26 @@ try
     }
     try { program.Run(host.Context, host.Registry); }
     catch (Error error) { return Reports.ReportError("run", error); }
+    int entriesCalled = 0;
+    var entries = program.Entries;
+    void CallEntry(int index, Value argument)
+    {
+        Value result = program.Call(index, host.Context, host.Registry, [argument]);
+        entriesCalled++;
+        if (result.Kind != ValueKind.None) Protocol.EntryResult(entries[index].Name, result);
+    }
+    try
+    {
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (entries[i].Annotation == "item")
+                foreach (ObjRef item in host.Shop.Items.Values) CallEntry(i, Value.Object("Money", item));
+            else if (entries[i].Annotation == "total") CallEntry(i, host.TotalHandle());
+        }
+    }
+    catch (Error error) { return Reports.ReportError("run", error); }
     if (host.Ledger.Balance < 0) return Reports.ReportAppFailure("ledger: negative balance");
-    return Protocol.Success(host.Ledger);
+    return Protocol.Success(host.Ledger, entriesCalled);
 }
 catch (Exception)
 {

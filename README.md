@@ -7,24 +7,25 @@ to build it.
 
 ```sh
 python3 --version
-npm install --global @lmctl-ai/lmctl@0.2.426   # Node 24+
+export LMSCRIPT_BIN=/path/to/v6/lmscript  # Node 24+, rule-entry capable
+export LMSCRIPT_MIN=0                   # development compiler version gate
 dotnet build src/LmCode.Sample.csproj -c Release
 ./test.sh
 dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true
 ```
 
-Case 067 uses R47/R48 rule methods; reproducing its pinned bytecode needs a rule-methods-capable compiler,
-so set `LMSCRIPT_BIN` to a current lmctl-mono `lmscript` build until a containing release is published
-(see [sample-suite/README.md](sample-suite/README.md)). Runtime execution of the pinned bytecode works on
-any compiler version, since annotations and interface bindings are compile-time metadata only.
+The pinned suite is DSLB v6 only. Cases 067–069 exercise rule methods and entry
+dispatch; reproducing bytecode requires a v6 rule-entry compiler, selected with
+LMSCRIPT_BIN. The old published 0.2.426 compiler is not sufficient. Runtime execution
+uses the pinned v6 SDK and does not compile source. See [local verification notes](durable-memory/v6-rule-entries.md).
 
 ## Write a host in C# in ten steps
 
 1. Read the [portable contract](sample-suite/CONTRACT.md) and choose domain
    objects whose lifetimes are owned by one host process.
 2. Start with [host.schema.json](sample-suite/host.schema.json); it declares
-   contexts, object types, overloads, operators, the `Currency` enum and one
-   SAM interface (`Adjuster`, `(Money) -> void`) under `interfaces`.
+   contexts, object types, overloads, operators, the `Currency` enum and two
+   SAM interfaces (`Adjuster`, `(Money) -> void`; `Score`, `(Money) -> int`) under `interfaces`.
 3. Add a .NET 8 executable project referencing `vendor/lmcode-csharp/LmCode.csproj`.
 4. Read [the domain model](src/Shop.cs) and [the CLI](src/Program.cs), then
    register contexts and callbacks with `Registry.Context`, `Function` and
@@ -37,7 +38,9 @@ any compiler version, since annotations and interface bindings are compile-time 
 7. Treat `VmString` as bytes. Use `Span` for byte-preserving operations and
    `ToString()` only when the host intentionally decodes UTF-8.
 8. Load bytecode with the exact UTF-8 schema bytes using `Program.Load`, then
-   run it with a fresh `Context`; normalize only the documented loader messages.
+   run its body with the host Context, then enumerate Entries in source order. Call
+   item rules for each existing Money handle and total rules with Shop.total();
+   ignore other annotations. Preserve entry failures as run-phase errors.
 9. Emit one JSON result line and the specified exit code: 0 success, 2 CLI,
    3 VM/load, and 4 application/setup failure. Keep stderr empty.
 10. Run [test.sh](test.sh), which locks the SDK/corpus and executes every case
@@ -53,11 +56,11 @@ any compiler version, since annotations and interface bindings are compile-time 
 | Located VM/host errors, numeric assertions, application failure | 025–033 |
 | Raw/dedented heredocs and all outer splice types | 046–047 |
 | Native byte/int64/float/handle/collection boundaries and VM limits | 049–066 |
-| `@NAME` rule method annotation and `implements` SAM interface | 067 |
+| Rule methods, ordered item/total entry dispatch and returned values | 067–069 |
 | Typed maps, Stack/Queue/PQ and immutable JSON | 101–108 |
 | Typed list/map/JSON literals and binding compatibility | 201–205 |
 | Strict Base64/hex and independent map snapshots | 301–305, 311–313 |
-| Malformed bytecode, schema binding and wrong-handle imports | 090–092 |
+| Malformed bytecode, schema binding and wrong-handle imports | 090–093 |
 
 The [full canonical matrix](sample-suite/README.md) maps every source, bytecode
 and oracle. All 181 v3 standard signatures and the current domain/testing signatures are exercised.
@@ -89,7 +92,7 @@ command above; CI proves Linux, macOS and Windows artifacts.
 NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/).
 
 
-Catalog v3 is pinned with the SDK and the canonical 91-case corpus. The merged
+Catalog v3 is pinned with the SDK and the canonical 94-case corpus. The merged
 schema now carries the `interfaces` key, which the published compiler 0.2.426
 rejects as an unknown top-level key; reproducing the pinned bytecode needs a
 rule-methods-capable compiler via `LMSCRIPT_BIN` until a containing release is
@@ -103,7 +106,7 @@ V3 byte codecs operate on raw `VmString` data: Base64 is canonical padded RFC
 Map `keys()`/`values()` return independent mutable snapshots in insertion order.
 Every one of the 181 standard signatures is imported by this corpus.
 
-Public CI runs all 91 pinned programs with exact stdout/exit checks. Programs
+Public CI runs all 94 pinned programs with exact stdout/exit checks. Programs
 201–205 need `lmcode-literals-v1` and program 067 needs `lmcode-rule-methods-v1`
 (R47/R48); the published compiler 0.2.426 lacks both, and the canonical
 reproduction checker fails explicitly on the unsupported features instead of
@@ -114,5 +117,10 @@ reproduce:
 LMSCRIPT_BIN=/path/to/lmscript LMCODE_REQUIRE_LITERAL_COMPILER=1 ./test.sh
 ```
 
-Local compiler-main validation reproduces all 91/91 bytecode files; expectations
+Local compiler-main validation reproduces all 94/94 bytecode files; expectations
 remain the unmodified committed C++ reference snapshots.
+
+The result field entries_called counts successful rule calls; entries retains its
+ledger-record meaning. Value rules print entry NAME = VALUE before the result JSON.
+The same total helper is used by the schema callback and entry dispatch; Money
+objects remain in the host Context for the entire execution.

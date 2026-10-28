@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='sample bytes ') as scratch:
     subprocess.run([compiler, '--no-preflight', str(source), str(bytecode)], check=True)
     result = subprocess.run([*sys.argv[1:], '--dsl', str(bytecode)],
                             env=dict(os.environ, SAMPLE_TMP=scratch), capture_output=True, timeout=30)
-    expected = b'{"ok": true, "result": {"balance": 0, "entries": 0, "note": "\\u0000\\u0008\\u000c\\t\\r\\n\\"\\\\\xff\xc3\xa9"}}\n'
+    expected = b'{"ok": true, "result": {"balance": 0, "entries": 0, "note": "\\u0000\\u0008\\u000c\\t\\r\\n\\"\\\\\xff\xc3\xa9", "entries_called": 0}}\n'
     if result.returncode or result.stderr or result.stdout != expected:
         sys.exit(f'note-byte mismatch: exit={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}')
 print('PASS note bytes: NUL, JSON escapes, invalid UTF-8 and multibyte UTF-8')
