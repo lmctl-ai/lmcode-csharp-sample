@@ -13,12 +13,18 @@ dotnet build src/LmCode.Sample.csproj -c Release
 dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true
 ```
 
+Case 067 uses R47/R48 rule methods; reproducing its pinned bytecode needs a rule-methods-capable compiler,
+so set `LMSCRIPT_BIN` to a current lmctl-mono `lmscript` build until a containing release is published
+(see [sample-suite/README.md](sample-suite/README.md)). Runtime execution of the pinned bytecode works on
+any compiler version, since annotations and interface bindings are compile-time metadata only.
+
 ## Write a host in C# in ten steps
 
 1. Read the [portable contract](sample-suite/CONTRACT.md) and choose domain
    objects whose lifetimes are owned by one host process.
 2. Start with [host.schema.json](sample-suite/host.schema.json); it declares
-   contexts, object types, overloads, operators and the `Currency` enum.
+   contexts, object types, overloads, operators, the `Currency` enum and one
+   SAM interface (`Adjuster`, `(Money) -> void`) under `interfaces`.
 3. Add a .NET 8 executable project referencing `vendor/lmcode-csharp/LmCode.csproj`.
 4. Read [the domain model](src/Shop.cs) and [the CLI](src/Program.cs), then
    register contexts and callbacks with `Registry.Context`, `Function` and
@@ -47,6 +53,7 @@ dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained
 | Located VM/host errors, numeric assertions, application failure | 025–033 |
 | Raw/dedented heredocs and all outer splice types | 046–047 |
 | Native byte/int64/float/handle/collection boundaries and VM limits | 049–066 |
+| `@NAME` rule method annotation and `implements` SAM interface | 067 |
 | Typed maps, Stack/Queue/PQ and immutable JSON | 101–108 |
 | Typed list/map/JSON literals and binding compatibility | 201–205 |
 | Strict Base64/hex and independent map snapshots | 301–305, 311–313 |
@@ -82,10 +89,13 @@ command above; CI proves Linux, macOS and Windows artifacts.
 NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/).
 
 
-Catalog v3 is pinned with the SDK and the canonical 90-case corpus. Published
-compiler 0.2.426 accepts the explicitly merged v3 schema used here; its implicit
-standard bundle is still v1. The SDK separately tests implicit v3 signatures with
-an authoritative compiler-main scratch build. Tests never rewrite oracle files.
+Catalog v3 is pinned with the SDK and the canonical 91-case corpus. The merged
+schema now carries the `interfaces` key, which the published compiler 0.2.426
+rejects as an unknown top-level key; reproducing the pinned bytecode needs a
+rule-methods-capable compiler via `LMSCRIPT_BIN` until a containing release is
+published. The published compiler's implicit standard bundle is still v1. The
+SDK separately tests implicit v3 signatures with an authoritative compiler-main
+scratch build. Tests never rewrite oracle files.
 
 
 V3 byte codecs operate on raw `VmString` data: Base64 is canonical padded RFC
@@ -93,14 +103,16 @@ V3 byte codecs operate on raw `VmString` data: Base64 is canonical padded RFC
 Map `keys()`/`values()` return independent mutable snapshots in insertion order.
 Every one of the 181 standard signatures is imported by this corpus.
 
-Public CI runs all 90 pinned programs with exact stdout/exit checks. The
-canonical reproduction checker explicitly reports five literal-source skips
-only when it verifies the compiler's legacy v1 signature digest. For a compiler
-main build, require every source to reproduce:
+Public CI runs all 91 pinned programs with exact stdout/exit checks. Programs
+201–205 need `lmcode-literals-v1` and program 067 needs `lmcode-rule-methods-v1`
+(R47/R48); the published compiler 0.2.426 lacks both, and the canonical
+reproduction checker fails explicitly on the unsupported features instead of
+skipping or hiding them. For a compiler main build, require every source to
+reproduce:
 
 ```sh
 LMSCRIPT_BIN=/path/to/lmscript LMCODE_REQUIRE_LITERAL_COMPILER=1 ./test.sh
 ```
 
-Local compiler-main validation reproduces all 90/90 bytecode files; expectations
+Local compiler-main validation reproduces all 91/91 bytecode files; expectations
 remain the unmodified committed C++ reference snapshots.
