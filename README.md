@@ -6,18 +6,13 @@ portable corpus in [sample-suite](sample-suite); no sibling checkout is needed
 to build it.
 
 ```sh
-python3 --version
-export LMSCRIPT_BIN=/path/to/v6/lmscript  # Node 24+, rule-entry capable
-export LMSCRIPT_MIN=0                   # development compiler version gate
-dotnet build src/LmCode.Sample.csproj -c Release
-./test.sh
-dotnet publish src/LmCode.Sample.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true
+npm install -g @lmctl-ai/lmctl
+lmscript test.lms
+# Equivalent: lmctl test.lms
 ```
 
-The pinned suite is DSLB v6 only. Cases 067–069 exercise rule methods and entry
-dispatch; reproducing bytecode requires a v6 rule-entry compiler, selected with
-LMSCRIPT_BIN. The old published 0.2.426 compiler is not sufficient. Runtime execution
-uses the pinned v6 SDK and does not compile source. See [local verification notes](durable-memory/v6-rule-entries.md).
+Use .NET 8, Node 24 and Python 3 for vendor-lock verification. The pinned suite
+is DSLB v6; current published lmscript compiles its annotated rule entries.
 
 ## Write a host in C# in ten steps
 
@@ -92,35 +87,20 @@ command above; CI proves Linux, macOS and Windows artifacts.
 NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/).
 
 
-Catalog v3 is pinned with the SDK and the canonical 94-case corpus. The merged
-schema now carries the `interfaces` key, which the published compiler 0.2.426
-rejects as an unknown top-level key; reproducing the pinned bytecode needs a
-rule-methods-capable compiler via `LMSCRIPT_BIN` until a containing release is
-published. The published compiler's implicit standard bundle is still v1. The
-SDK separately tests implicit v3 signatures with an authoritative compiler-main
-scratch build. Tests never rewrite oracle files.
-
-
 V3 byte codecs operate on raw `VmString` data: Base64 is canonical padded RFC
 4648, hex output is lowercase, and invalid alphabets/padding/whitespace trap.
 Map `keys()`/`values()` return independent mutable snapshots in insertion order.
 Every one of the 181 standard signatures is imported by this corpus.
 
-Public CI runs all 94 pinned programs with exact stdout/exit checks. Programs
-201–205 need `lmcode-literals-v1` and program 067 needs `lmcode-rule-methods-v1`
-(R47/R48); the published compiler 0.2.426 lacks both, and the canonical
-reproduction checker fails explicitly on the unsupported features instead of
-skipping or hiding them. For a compiler main build, require every source to
-reproduce:
-
-```sh
-LMSCRIPT_BIN=/path/to/lmscript LMCODE_REQUIRE_LITERAL_COMPILER=1 ./test.sh
-```
-
-Local compiler-main validation reproduces all 94/94 bytecode files; expectations
-remain the unmodified committed C++ reference snapshots.
-
 The result field entries_called counts successful rule calls; entries retains its
 ledger-record meaning. Value rules print entry NAME = VALUE before the result JSON.
 The same total helper is used by the schema callback and entry dispatch; Money
 objects remain in the host Context for the entire execution.
+
+## lmscript tests and automatic releases
+
+Install .NET 8, Node 24 and `npm install -g @lmctl-ai/lmctl`. From this repository run `lmscript test.lms` or `lmctl test.lms`; test.sh forwards to lmscript. Set RUN_NATIVE=1 and RUNTIME_ID to linux-x64, linux-arm64, osx-arm64, osx-x64 or win-x64 to include NativeAOT builds and execution (requires the platform native toolchain).
+
+Every main push builds and tests all five platforms, then publishes native executables, licenses and SHA256SUMS to GitHub Releases. Pull requests validate without publishing.
+
+`examples/rule-entries.lms` shows annotated functions implementing Adjuster: the host dispatches @item per item and @total for the total. Case 069 demonstrates returned values. The lmscript driver audits 181 standard and 45 host signatures, reproduces all 94 bytecode cases, runs negative runner controls, and tests managed/native output bytes and the annotated example. `scripts/check-note-bytes.lms` preserves NUL, escaped controls, invalid UTF-8 and multibyte UTF-8 checks. Python is only used for vendored lock maintenance; Node provides binary/process adapters.

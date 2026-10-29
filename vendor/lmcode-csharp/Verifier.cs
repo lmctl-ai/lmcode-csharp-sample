@@ -141,6 +141,8 @@ public sealed partial class Program
         if (open.Count != 0) throw Error.BadBytecode($"{(open[^1].Op == Op.FOR_RANGE ? "FOR_RANGE" : "WHILE_BEGIN")} at offset {open[^1].Opener} is not closed by {(open[^1].Op == Op.FOR_RANGE ? "FOR_NEXT" : "LOOP_BACK")}");
         foreach (var (at, slot) in stores)
             if (usedSlots.Contains(slot)) throw Error.BadBytecode($"STORE_LOCAL at offset {at} writes a read-only range slot {slot}");
+        foreach (var (at, slot) in stores)
+            if (locals[slot].Hidden) throw Error.BadBytecode($"STORE_LOCAL at offset {at} writes compiler-owned loop local {slot}");
         foreach (var jump in jumps)
         {
             if (!starts.Contains(jump.Target)) throw Error.BadBytecode($"jump at offset {jump.At} targets {jump.Target}, not an instruction start");

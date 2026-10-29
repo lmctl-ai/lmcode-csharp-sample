@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
@@ -127,6 +128,7 @@ public sealed partial class Program
             try
             {
                 name = Constant(r.U32(), "entry name");
+                if (p.entries.Any(e => e.Metadata.Name == name)) throw Error.BadBytecode($"duplicate entry name '{name}'");
                 string annotation = Constant(r.U32(), "entry annotation"), iface = Constant(r.U32(), "entry interface");
                 int nparams = r.U16();
                 var region = new Program { consts = p.consts, imports = p.imports, contexts = p.contexts, boundRegistry = registry };

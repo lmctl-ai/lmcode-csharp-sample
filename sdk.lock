@@ -1,12 +1,12 @@
 {
   "repo": "lmctl-ai/lmcode-csharp",
-  "commit": "d99740dc4e9425fe1d4a199c267685f18efc73b4",
+  "commit": "f33432a646f1f62e210a0bacf7e89e63d35e900c",
   "sha256": {
     "Errors.cs": "235fa55e3330ce762112f13c3bd07c686577d8e5d4bdf974b318636f135edc92",
     "Execution.cs": "d5abc3b21ea35d124d79ce497d528e0ec47be9f4b229577434e74f9b027efc3c",
     "LICENSE": "949eb9b711d9b64ae472b87b94916e8427575a75d0d218f6c4cbccf8c48d46f3",
     "LmCode.csproj": "810176c90d5cf8069d36081b9f2053889a05315bab9441b962cda19462998fac",
-    "Program.cs": "ff244f09ce4cf27451be84dc3bd56a00ca7838d51042c9d946ebc5c1bf8f3657",
+    "Program.cs": "0bbaedcc0a8b261c160f4dfbff6aad76fbf6e42189b8f0618b2be3d354884f62",
     "Properties/AssemblyInfo.cs": "428ac49a5cdcc053553c406a744f8c5521f053387484919d30643ae0ff2538a2",
     "Registry.cs": "6e448a22922fb6fa3e234f661e5068c76d31ea950c42ea970ca29d91efda46d9",
     "Stdlib/CollectionsCatalog.cs": "b02d86a57b420855ba171e50b60f0f6a712ab17fb02effdb4ef27fc11f60a51c",
@@ -19,7 +19,7 @@
     "Stdlib/StringCatalog.cs": "f2957cc05edbe32081954a950a03db5fdcea782705dbfee7b0d639b43239cf12",
     "Stdlib/TestingCatalog.cs": "106e172a3385812cd4538537e3a30d6be934b8b4697e7bcc0cab1c8c8d7dec76",
     "Values.cs": "2b4a7fd4f5cd9bb9a1a2cfc5f341a576980525bafb1f9f17c4d59426469fb7dd",
-    "Verifier.cs": "2a5ddbf5be139a6ce19f35f29d91f72d1c3fc4817ec0f92a8db9451608a52aed",
+    "Verifier.cs": "3f4507a3d141a559996dcda34338f275f9139d2b03960d465ec12264fb59eb6e",
     "std/lmcode-std.schema.json": "430588371274f09304d7c05c68819297c71d3ce4884f0e523d8ff19a33aff8af"
   }
 }

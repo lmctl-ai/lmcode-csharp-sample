@@ -1,0 +1,13 @@
+import "../sample-suite/runner-lib.lms";
+root = suite_root();
+assert(len(ARGV) > 0, "host command required");
+scratch = binary(root, {op:"temp"});
+source = path_join(scratch, "note.lms");
+bytecode = path_join(scratch, "note.dslb");
+write_file(source, "program = _lmcode_ schema=" + json_stringify(path_join(root, "sample.dsl.json")) + ";\nledger.note(file_read(sample_tmp() + \"/note.bin\"));\nend _lmcode_\nsavedsl(program, ARGV[0]);\n");
+compiled = invoke(root, compiler_command(), ["--no-preflight", source, bytecode], {}, 30000);
+assert(compiled.code == 0, "note compilation failed: " + compiled.stderr);
+result = invoke(root, ARGV, ["--dsl", bytecode], {"note.bin":"00080c090d0a225cffc3a9"}, 30000);
+rmdir(scratch, true);
+assert(result.code == 0 && result.stderr_hex == "" && result.hex == "7b226f6b223a20747275652c2022726573756c74223a207b2262616c616e6365223a20302c2022656e7472696573223a20302c20226e6f7465223a20225c75303030305c75303030385c75303030635c745c725c6e5c225c5cffc3a9222c2022656e74726965735f63616c6c6564223a20307d7d0a", "note bytes differ");
+println("PASS note bytes: NUL, JSON escapes, invalid UTF-8 and multibyte UTF-8");

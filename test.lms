@@ -1,0 +1,33 @@
+# Run from this repository: lmctl test.lms or lmscript test.lms.
+import "./sample-suite/runner-lib.lms";
+root = suite_root();
+fn step(command) {
+  result = invoke(suite_root(), command, [], {}, 900000);
+  if (result.stdout != "") { print(result.stdout); }
+  if (result.stderr != "") { print(result.stderr); }
+  assert(result.code == 0 && result.error == "", "test step failed: " + json_stringify(command) + " " + result.error);
+}
+python = "python3";
+if (env("RUNNER_OS") == "Windows") { python = "python"; }
+step([python, "-B", "scripts/sync.py", "check"]);
+step(["dotnet", "build", "src/LmCode.Sample.csproj", "-c", "Release", "--nologo"]);
+step(concat(compiler_command(), ["--no-preflight", "sample-suite/audit.lms", "--std", "std/lmcode-std.schema.json"]));
+step(concat(compiler_command(), ["--no-preflight", "sample-suite/check-recompile.lms"]));
+step(concat(compiler_command(), ["--no-preflight", "sample-suite/test-runner.lms"]));
+mkdir("artifacts");
+step(concat(compiler_command(), ["--no-preflight", "examples/rule-entries.lms", path_join(Directory, "artifacts/rule-entries.dslb")]));
+fn check_host(host) {
+  step(concat(compiler_command(), concat(["--no-preflight", "sample-suite/run-suite.lms"], host)));
+  result = invoke(suite_root(), host, ["--dsl", path_join(Directory, "artifacts/rule-entries.dslb")], {}, 30000);
+  expected = binary(suite_root(), {op:"hex", path:path_join(suite_root(), "expected/068-rule-entries.out")});
+  assert(result.code == 0 && result.hex == expected && result.stderr_hex == "", "annotated interface example differs");
+  println("PASS annotated interface example");
+  step(concat(compiler_command(), concat(["--no-preflight", "scripts/check-note-bytes.lms"], host)));
+}
+check_host(["dotnet", path_join(Directory, "src/bin/Release/net8.0/lmcode-csharp-sample.dll")]);
+if (env("RUN_NATIVE") == "1") {
+  rid = env("RUNTIME_ID"); assert(rid != "", "RUNTIME_ID is required");
+  step(["dotnet", "publish", "src/LmCode.Sample.csproj", "-c", "Release", "-r", rid, "--self-contained", "true", "-p:PublishAot=true", "-p:IlcTreatWarningsAsErrors=true", "-p:StripSymbols=true", "-o", "artifacts/native"]);
+  ext = ""; if (env("RUNNER_OS") == "Windows") { ext = ".exe"; }
+  check_host([path_join(Directory, "artifacts/native/lmcode-csharp-sample" + ext)]);
+}

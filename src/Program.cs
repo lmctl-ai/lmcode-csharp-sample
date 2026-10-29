@@ -18,7 +18,7 @@ try
     resource.CopyTo(schemaStream);
     byte[] schema = schemaStream.ToArray();
     var host = new Host();
-    if (args is ["--version"]) { Console.WriteLine("lmcode-csharp-sample 0.1.0"); return 0; }
+    if (args is ["--version"]) { Console.WriteLine("lmcode-csharp-sample " + Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion); return 0; }
     if (args is ["--dsl-schema"] or ["--dsl-schema", "--json"])
     {
         Console.OpenStandardOutput().Write(schema);
