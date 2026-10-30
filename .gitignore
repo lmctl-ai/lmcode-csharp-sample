@@ -6,3 +6,5 @@ artifacts/
 *.suo
 __pycache__/
 *.pyc
+
+/build/
