@@ -58,7 +58,7 @@ is DSLB v6; current published lmscript compiles its annotated rule entries.
 | Malformed bytecode, schema binding and wrong-handle imports | 090–093 |
 
 The [full canonical matrix](sample-suite/README.md) maps every source, bytecode
-and oracle. All 181 v3 standard signatures and the current domain/testing signatures are exercised.
+and oracle. All 182 v3 standard signatures and the current domain/testing signatures are exercised.
 [Protocol.cs](src/Protocol.cs) preserves raw note bytes in the result JSON;
 text error messages use the SDK's Unicode error API.
 
@@ -90,7 +90,7 @@ NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.co
 V3 byte codecs operate on raw `VmString` data: Base64 is canonical padded RFC
 4648, hex output is lowercase, and invalid alphabets/padding/whitespace trap.
 Map `keys()`/`values()` return independent mutable snapshots in insertion order.
-Every one of the 181 standard signatures is imported by this corpus.
+Every one of the 182 standard signatures is imported by this corpus.
 
 The result field entries_called counts successful rule calls; entries retains its
 ledger-record meaning. Value rules print entry NAME = VALUE before the result JSON.
@@ -103,4 +103,10 @@ Install .NET 8, Node 24 and `npm install -g @lmctl-ai/lmctl`. From this reposito
 
 Every main push builds and tests all five platforms, then publishes native executables, licenses and SHA256SUMS to GitHub Releases. Pull requests validate without publishing.
 
-`examples/rule-entries.lms` shows annotated functions implementing Adjuster: the host dispatches @item per item and @total for the total. Case 069 demonstrates returned values. The lmscript driver audits 181 standard and 45 host signatures, reproduces all 94 bytecode cases, runs negative runner controls, and tests managed/native output bytes and the annotated example. `scripts/check-note-bytes.lms` preserves NUL, escaped controls, invalid UTF-8 and multibyte UTF-8 checks. Python is only used for vendored lock maintenance; Node provides binary/process adapters.
+`examples/rule-entries.lms` shows annotated functions implementing Adjuster: the host dispatches @item per item and @total for the total. Case 069 demonstrates returned values. The lmscript driver audits 182 standard and 45 host signatures, reproduces all 108 bytecode cases, runs negative runner controls, and tests managed/native output bytes and the annotated example. `scripts/check-note-bytes.lms` preserves NUL, escaped controls, invalid UTF-8 and multibyte UTF-8 checks. Python is only used for vendored lock maintenance; Node provides binary/process adapters.
+
+## Text templates
+
+[examples/text-template.lms](examples/text-template.lms) renders ordinary text from a nested context with indexed lists, loops and boolean conditions. The standard `template_render(string, Json) -> string` function performs one pass; inserted values stay literal. Compile it with `lmscript --no-preflight examples/text-template.lms build/text-template.dslb`, then run the sample host with `--dsl build/text-template.dslb`.
+
+The lmscript-driven suite runs 108 cases, including template success/error cases. See the [portable template contract](https://github.com/lmctl-ai/lmcode-cpp/blob/main/std/template.md).

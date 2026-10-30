@@ -80,6 +80,101 @@ public static class JsonCatalog
         public Node Parse() { Node n = Value(); Skip(); if (p != input.Length) Fail("trailing input", p); return n; }
     }
 
+
+    private const string TemplatePath = @"[A-Za-z_][A-Za-z0-9_]*(?:[.][A-Za-z_][A-Za-z0-9_]*|\[[0-9]+\])*";
+    private static readonly System.Text.RegularExpressions.Regex TemplateHead = new("^<("+TemplatePath+@")(?::\{([A-Za-z_][A-Za-z0-9_]*)\||>)");
+    private static readonly System.Text.RegularExpressions.Regex TemplateIf = new(@"^<if\(("+TemplatePath+@")\)>");
+    private static readonly System.Text.RegularExpressions.Regex TemplatePart = new(@"[A-Za-z_][A-Za-z0-9_]*|\[[0-9]+\]");
+    private static readonly System.Text.RegularExpressions.Regex TemplateClose = new("^};[ ]*separator[ ]*=[ ]*(\"(?:[^\"\\\\]|\\\\.)*\")>");
+    private sealed class TemplateNode {
+        public string Text="",Path="",Item="",Separator="";
+        public bool Conditional;
+        public List<TemplateNode> Body=[],Otherwise=[];
+    }
+    private sealed class TemplateParser(string source) {
+        private int pos;
+        public string Ending="";
+        private static void Flush(List<TemplateNode> nodes,StringBuilder literal){
+            if(literal.Length>0){nodes.Add(new TemplateNode{Text=literal.ToString()});literal.Clear();}
+        }
+        public List<TemplateNode> Parse(string mode,int depth){
+            if(depth>256)throw Error.Host("template_render: maximum nesting exceeded");
+            List<TemplateNode> nodes=[];var literal=new StringBuilder();
+            while(pos<source.Length){
+                string rest=source[pos..];
+                if(mode=="loop" && rest.StartsWith("}>",StringComparison.Ordinal)){Flush(nodes,literal);pos+=2;Ending="";return nodes;}
+                if(mode=="loop" && rest.StartsWith("};",StringComparison.Ordinal)){
+                    var m=TemplateClose.Match(rest);if(!m.Success)throw Error.Host("template_render: invalid loop separator");
+                    byte[] raw=Encoding.Latin1.GetBytes(m.Groups[1].Value);
+                    try{
+                        _=new UTF8Encoding(false,true).GetString(raw);
+                        Ending=Encoding.Latin1.GetString(new Parser(raw).Parse().Text.Span);
+                    }catch(Exception e) when(e is Error or DecoderFallbackException){throw Error.Host("template_render: invalid loop separator");}
+                    Flush(nodes,literal);pos+=m.Length;return nodes;
+                }
+                if(rest.StartsWith("<<",StringComparison.Ordinal)){literal.Append('<');pos+=2;continue;}
+                if(rest.StartsWith("<else>",StringComparison.Ordinal) || rest.StartsWith("<endif>",StringComparison.Ordinal)){
+                    string tag=rest.StartsWith("<else>",StringComparison.Ordinal)?"else":"endif";
+                    if((mode!="if" && mode!="else") || (mode=="else" && tag=="else"))throw Error.Host("template_render: unexpected conditional delimiter");
+                    Flush(nodes,literal);pos+=tag=="else"?6:7;Ending=tag;return nodes;
+                }
+                var conditional=TemplateIf.Match(rest);
+                if(conditional.Success){
+                    Flush(nodes,literal);pos+=conditional.Length;var n=new TemplateNode{Path=conditional.Groups[1].Value,Conditional=true};
+                    n.Body=Parse("if",depth+1);if(Ending=="else")n.Otherwise=Parse("else",depth+1);nodes.Add(n);continue;
+                }
+                var head=TemplateHead.Match(rest);
+                if(!head.Success){literal.Append(source[pos++]);continue;}
+                Flush(nodes,literal);pos+=head.Length;var node=new TemplateNode{Path=head.Groups[1].Value,Item=head.Groups[2].Value};
+                if(node.Item!=""){
+                    if(node.Item=="index")throw Error.Host("template_render: index is reserved");
+                    node.Body=Parse("loop",depth+1);node.Separator=Ending;
+                }
+                nodes.Add(node);
+            }
+            if(mode!="")throw Error.Host("template_render: unterminated block");
+            Flush(nodes,literal);return nodes;
+        }
+    }
+    private static string TemplateJson(Node n)=>Encoding.Latin1.GetString(Encoding.UTF8.GetBytes(Emit(n)));
+    private static Node TemplateLookup(Node context,Dictionary<string,Node> locals,string path){
+        Node n=context;bool first=true;
+        foreach(System.Text.RegularExpressions.Match part in TemplatePart.Matches(path)){
+            string key=part.Value;
+            if(first){first=false;if(locals.TryGetValue(key,out var local)){n=local;continue;}}
+            Node? next=null;
+            if(key.StartsWith('[')){
+                string digits=key[1..^1];
+                if(n.Kind=="array" && int.TryParse(digits,NumberStyles.None,CultureInfo.InvariantCulture,out int i)
+                    && i>=0 && i<n.Array.Count && i.ToString(CultureInfo.InvariantCulture)==digits)next=n.Array[i];
+            }else if(n.Kind=="object")foreach(var m in n.Object)if(Encoding.Latin1.GetString(m.Key.Span)==key){next=m.Value;break;}
+            if(next is null)throw Error.Host("template_render: missing variable "+path);n=next;
+        }
+        return n;
+    }
+    private static void EvaluateTemplate(List<TemplateNode> nodes,Node context,Dictionary<string,Node> locals,StringBuilder output){
+        foreach(var n in nodes){
+            if(n.Path==""){output.Append(n.Text);continue;}
+            Node value=TemplateLookup(context,locals,n.Path);
+            if(n.Conditional){
+                if(value.Kind!="bool")throw Error.Host("template_render: condition requires a bool: "+n.Path);
+                EvaluateTemplate(value.Bool?n.Body:n.Otherwise,context,locals,output);continue;
+            }
+            if(n.Item==""){output.Append(value.Kind=="string"?Encoding.Latin1.GetString(value.Text.Span):TemplateJson(value));continue;}
+            if(value.Kind!="array")throw Error.Host("template_render: loop requires a list: "+n.Path);
+            var scope=new Dictionary<string,Node>(locals);
+            for(int i=0;i<value.Array.Count;i++){
+                if(i>0)output.Append(n.Separator);
+                scope[n.Item]=value.Array[i];scope["index"]=new Node{Kind="int",Integer=i,Raw=i.ToString(CultureInfo.InvariantCulture)};
+                EvaluateTemplate(n.Body,context,scope,output);
+            }
+        }
+    }
+    private static string RenderTemplate(string source,Node context){
+        var nodes=new TemplateParser(source).Parse("",0);var output=new StringBuilder();
+        EvaluateTemplate(nodes,context,[],output);return output.ToString();
+    }
+
     public static void RegisterJson(Registry r)
     {
         r.BeginCompatibilityRegistration();
@@ -91,6 +186,11 @@ public static class JsonCatalog
                 try { _ = new UTF8Encoding(false, true).GetString(bytes); } catch (DecoderFallbackException ex) { throw Error.Host($"json_parse: invalid UTF-8 at byte {ex.Index}"); }
                 if (bytes.Length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf) throw Error.Host("json_parse: BOM is not allowed at byte 0");
                 return Value.Object("Json", CollectionsCatalog.Allocate(c, "Json", new Parser(bytes).Parse()));
+            });
+            r.Function("template_render", ["string","Json"], "string", (c,a) => {
+                var context=c.Get<Node>(a[1].AsObj());
+                if(context.Kind!="object")throw Error.Host("template_render: context must be an object");
+                return Value.Str(new VmString(Encoding.Latin1.GetBytes(RenderTemplate(Encoding.Latin1.GetString(a[0].AsStr().Span),context))));
             });
             r.Method("Json", "kind", [], "string", (c, o, _) => Text(c.Get<Node>(o).Kind));
             r.Method("Json", "len", [], "int", (c, o, _) => { var n = c.Get<Node>(o); if (n.Kind is not ("array" or "object")) throw Error.Host("Json.len: expected array or object"); return Value.Int(n.Kind == "array" ? n.Array.Count : n.Object.Count); });
