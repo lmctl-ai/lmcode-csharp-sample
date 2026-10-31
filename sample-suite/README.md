@@ -2,7 +2,7 @@
 
 This is the source of truth for all eight `lmcode-*-sample` hosts.
 See [CONTRACT.md](CONTRACT.md) for object semantics and the exact result protocol.
-The full schema is [sample.dsl.json](sample.dsl.json); [host.schema.json](host.schema.json)
+The full schema is [`sample.dsl.json`](sample.dsl.json); [host.schema.json](host.schema.json)
 contains only the small shop/ledger domain. Every process starts with fresh state.
 
 ```sh
@@ -201,7 +201,7 @@ published `@lmctl-ai/lmctl` 0.2.442 or later. Source reproduction with an older
 compiler is an explicit error, as for any unsupported compiler.
 
 Cases 068/069, compile-errors/rule-annotation-without-implements and mutation
-093-v5-refused cover R49 rule entries using lmcode bytecode (DSLB v6): every annotated rule compiles to
+093-v5-refused cover R49 rule entries (lmcode bytecode (DSLB v6)): every annotated rule compiles to
 a self-contained entry; after the body runs the host calls each `@item` entry once
 per shop item in order and each `@total` entry once with `shop.total()`, never
 calls other annotations, prints non-void results as `entry NAME = VALUE`, and
