@@ -13,6 +13,7 @@ public static class StandardCatalog
         FileCatalog.RegisterFile(registry);
         ContainersCatalog.RegisterContainers(registry);
         JsonCatalog.RegisterJson(registry);
+        ResultCatalog.RegisterResults(registry);
         return registry.Signatures().ToHashSet(StringComparer.Ordinal);
     });
     public static IReadOnlyCollection<string> Signatures => Canonical.Value;
@@ -29,6 +30,7 @@ public static class StandardCatalog
             FileCatalog.RegisterFile(registry);
             ContainersCatalog.RegisterContainers(registry);
             JsonCatalog.RegisterJson(registry);
+            ResultCatalog.RegisterResults(registry);
         }
         finally { registry.EndBuiltinRegistration(); }
     }

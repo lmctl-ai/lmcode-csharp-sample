@@ -35,6 +35,10 @@ try
         return 2;
     }
 
+    // One result belongs to this logical invocation, outside per-call VM arenas.
+    var resultSink = new ResultSink();
+    host.Registry.SetResultSink(resultSink);
+
     VmProgram program;
     try { program = VmProgram.Load(File.ReadAllBytes(path), schema, host.Registry); }
     catch (Error error)
@@ -68,7 +72,10 @@ try
     }
     catch (Error error) { return Reports.ReportError("run", error); }
     if (host.Ledger.Balance < 0) return Reports.ReportAppFailure("ledger: negative balance");
-    return Protocol.Success(host.Ledger, entriesCalled);
+    int status = Protocol.Success(host.Ledger, entriesCalled);
+    // Errors return above: dispatch, HALT diagnostics and app validation precede framing.
+    ResultFrames.Write(Console.OpenStandardOutput(), resultSink);
+    return status;
 }
 catch (Exception)
 {

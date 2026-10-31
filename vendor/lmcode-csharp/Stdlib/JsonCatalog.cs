@@ -6,7 +6,7 @@ namespace LmCode.Stdlib;
 /// <summary>Strict, byte-oriented JSON catalog. Nodes retain their source token spelling.</summary>
 public static class JsonCatalog
 {
-    private sealed class Node
+    internal sealed class Node
     {
         public string Kind = "null", Raw = "null";
         public VmString Text = VmString.FromString("");
@@ -206,6 +206,7 @@ public static class JsonCatalog
         }
         finally { r.EndCompatibilityRegistration(); }
     }
+    internal static Node ResultNode(Context context, ObjRef self) => context.Get<Node>(self);
     private static Value Text(string x) => Value.Str(VmString.FromString(x));
     private static Value Scalar(Node n, string expected, Func<Node, Value> ok) => n.Kind == expected ? ok(n) : throw Error.Host($"Json.as_{expected}: expected {expected}");
     private static string Emit(Node n) => n.Kind switch { "null" or "bool" or "int" or "float" or "string" => n.Raw, "array" => "[" + string.Join(',', n.Array.Select(Emit)) + "]", "object" => "{" + string.Join(',', n.Object.Select(x => x.RawKey + ":" + Emit(x.Value))) + "}", _ => "null" };

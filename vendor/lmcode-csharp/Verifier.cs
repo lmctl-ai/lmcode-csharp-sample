@@ -61,7 +61,7 @@ public sealed partial class Program
                         break;
                     }
                 case Op.MATH:
-                    if (r.U8() > 17) throw Error.BadBytecode($"MATH at offset {at} has unknown function {code[r.Pos - 1]}");
+                    if (r.U8() > 17) throw Error.BadBytecode($"unknown MATH function {code[r.Pos - 1]} at offset {at}");
                     break;
                 case Op.JUMP:
                 case Op.JUMP_IF_FALSE:
@@ -79,12 +79,12 @@ public sealed partial class Program
                         int counter = r.U16(), end = r.U16(), rel = r.I32();
                         Index(counter, locals.Count, "FOR_RANGE counter local");
                         Index(end, locals.Count, "FOR_RANGE end local");
-                        if (counter == end) throw Error.BadBytecode($"FOR_RANGE at offset {at} reuses local {counter} for counter and end");
+                        if (counter == end) throw Error.BadBytecode("FOR_RANGE counter and end slots must be distinct");
                         foreach (int slot in new[] { counter, end })
                         {
                             if (!locals[slot].Hidden || locals[slot].TypeName != "int")
                                 throw Error.BadBytecode($"FOR_RANGE at offset {at} requires hidden int local {slot}, got {(locals[slot].Hidden ? "" : "visible ")}{locals[slot].TypeName}");
-                            if (!usedSlots.Add(slot)) throw Error.BadBytecode($"FOR_RANGE at offset {at} reuses loop local {slot}");
+                            if (!usedSlots.Add(slot)) throw Error.BadBytecode($"FOR_RANGE slot {slot} is already owned by another range loop");
                         }
                         long exit = (long)r.Pos + rel;
                         if (exit <= at || exit > int.MaxValue) throw Error.BadBytecode($"FOR_RANGE at offset {at} exits backwards");
@@ -97,8 +97,8 @@ public sealed partial class Program
                         if (open.Count == 0 || open[^1].Op != Op.FOR_RANGE)
                             throw Error.BadBytecode($"FOR_NEXT at offset {at} has no matching FOR_RANGE");
                         var frame = open[^1]; open.RemoveAt(open.Count - 1);
-                        if (end != frame.End) throw Error.BadBytecode($"FOR_NEXT at offset {at} closes the wrong range loop (end local {end}, expected {frame.End})");
-                        if ((long)r.Pos + rel != frame.Body) throw Error.BadBytecode($"FOR_NEXT at offset {at} must jump to its FOR_RANGE body start {frame.Body}");
+                        if (end != frame.End) throw Error.BadBytecode($"FOR_NEXT at offset {at} names end slot {end}, expected {frame.End}");
+                        if ((long)r.Pos + rel != frame.Body) throw Error.BadBytecode($"FOR_NEXT at offset {at} must return to its FOR_RANGE body");
                         if (rel >= 0) throw Error.BadBytecode($"FOR_NEXT at offset {at} must jump backwards");
                         jumps.Add((at, frame.Body, false));
                         loops[at] = (frame.Counter, frame.End);
@@ -132,7 +132,7 @@ public sealed partial class Program
                         regions.Add(frame); break;
                     }
                 case Op.HALT:
-                    if (open.Count != 0) throw Error.BadBytecode($"HALT at offset {at} is inside loop");
+                    if (open.Count != 0) throw Error.BadBytecode("HALT inside loop");
                     halted = true; break;
                 default: break;
             }

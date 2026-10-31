@@ -10,6 +10,14 @@ public sealed class Registry
     private bool compatibilityRegistration;
     private int activeRuns;
     private bool defaultCollections;
+    private ResultSink? resultSink;
+    /// <summary>Bind once per logical invocation; retain across body and entry calls.</summary>
+    public void SetResultSink(ResultSink? sink)
+    {
+        if (!defaultCollections) throw Error.Host("std: registry has standard library disabled");
+        resultSink=sink;
+    }
+    internal ResultSink RequiredResultSink() => resultSink ?? throw Error.Host("lmcode return: no result sink");
     public Registry(bool includeStd = true) { if (includeStd) Stdlib.StandardCatalog.RegisterStd(this); }
     private Registry Add(string name, string? type, string[] parameters, string returns,
         Func<Context, Value[], Value>? function, Func<Context, ObjRef, Value[], Value>? method)

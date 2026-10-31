@@ -49,6 +49,13 @@ public static class ContainersCatalog
         finally { r.EndCompatibilityRegistration(); }
     }
 
+    internal static IReadOnlyList<(VmString Key,Value Value)> ResultEntries(Context context,ObjRef self,string type) => type switch
+    {
+        "IntMap" => context.Get<Map<long>>(self).Items.Select(item=>(item.Key,Value.Int(item.Value))).ToArray(),
+        "FloatMap" => context.Get<Map<double>>(self).Items.Select(item=>(item.Key,Value.Float(item.Value))).ToArray(),
+        _ => throw Error.Host("lmcode return: unsupported map handle"),
+    };
+
     private static ObjRef Allocate<T>(Context c, string type, T value) where T : class
         => CollectionsCatalog.Allocate(c, type, value);
 

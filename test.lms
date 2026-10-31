@@ -10,6 +10,7 @@ fn step(command) {
 python = "python3";
 if (env("RUNNER_OS") == "Windows") { python = "python"; }
 step([python, "-B", "scripts/sync.py", "check"]);
+step([python, "-B", "sample-suite/test_return_protocol.py"]);
 step(["dotnet", "build", "src/LmCode.Sample.csproj", "-c", "Release", "--nologo"]);
 step(concat(compiler_command(), ["--no-preflight", "sample-suite/audit.lms", "--std", "std/lmcode-std.schema.json"]));
 step(concat(compiler_command(), ["--no-preflight", "sample-suite/check-recompile.lms"]));
@@ -37,5 +38,5 @@ mkdir("build");
 template_bytecode = path_join(Directory,"build/text-template.dslb");
 step(concat(compiler_command(),["--no-preflight","examples/text-template.lms",template_bytecode]));
 template_result = invoke(root,["dotnet",path_join(Directory,"src/bin/Release/net8.0/lmcode-csharp-sample.dll")],["--dsl",template_bytecode],{},30000);
-assert(template_result.code == 0 && template_result.stderr_hex == "" && template_result.stdout == "Hello, Sam!\nItems: 0: apple, 1: pear\n{\"ok\": true, \"result\": {\"balance\": 0, \"entries\": 0, \"note\": \"\", \"entries_called\": 0}}\n","text template example differs");
+assert(template_result.code == 0 && template_result.stderr_hex == "" && template_result.stdout == "Hello, Sam!\nItems: 0: apple, 1: pear\n{\"ok\": true, \"result\": {\"balance\": 0, \"entries\": 0, \"note\": \"\", \"entries_called\": 0}}\nLMCODE_RETURN_BEGIN\nnull\nLMCODE_RETURN_END\n","text template example differs");
 println("PASS text template example");
