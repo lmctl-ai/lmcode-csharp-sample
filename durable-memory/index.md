@@ -1,8 +1,19 @@
 # C# sample notes
 
-Start with README.md, src/Program.cs and src/Shop.cs. sdk.lock and suite.lock record reviewed SDK/canonical corpus commits and every vendored byte.
+## Current contract
 
-- [v6 entry dispatch](v6-rule-entries.md): host dispatch semantics and historical migration evidence.
-- Root test.lms is the current test entry point: install npm @lmctl-ai/lmctl and run lmscript test.lms or lmctl test.lms. Python only maintains vendor locks; assertions and orchestration use lmscript.
-- RUN_NATIVE=1 with RUNTIME_ID builds and tests NativeAOT as well as managed code. All 94 cases, annotations and raw note bytes must match exactly.
-- Actions validates Linux x64/arm64, macOS x64/arm64 and Windows x64 on pushes/PRs. Main publishes native binaries, licenses and SHA256SUMS only after all jobs pass.
+Read README.md, src/Program.cs and src/Shop.cs. sdk.lock and suite.lock pin the
+committed runtime and canonical corpus; refresh with the repo's sync scripts.
+
+- [Invocation returns](invocation-returns.md): current sink/frame lifetime,
+  compiler requirement, pins and failing controls.
+- [v6 entry dispatch](v6-rule-entries.md): historical dispatch migration evidence.
+
+## Verification
+
+Root test.lms is the orchestration entry point, forwarded by test.sh. Use a
+source-built mono main compiler with the out/return cutover. Full gates run all
+123 canonical cases, managed examples and owned-result host controls.
+RUN_NATIVE=1 with RUNTIME_ID adds NativeAOT and repeats the host suite. CI compiler
+selection must be upgraded to a compatible compiler before remote qualification;
+old npm pin installation alone does not establish capability.

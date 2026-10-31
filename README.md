@@ -1,112 +1,99 @@
 # lmcode C# shop sample
 
-**Agent entry point:** this is a small .NET 8 host for the lmcode VM. It uses
-the checked-in SDK in [vendor/lmcode-csharp](vendor/lmcode-csharp) and the
-portable corpus in [sample-suite](sample-suite); no sibling checkout is needed
-to build it.
+## Purpose
 
-```sh
-npm install -g @lmctl-ai/lmctl
-lmscript test.lms
-# Equivalent: lmctl test.lms
+This .NET 8 host embeds the checked-in [C# runtime](vendor/lmcode-csharp) and
+[canonical portable suite](sample-suite). No sibling checkout is needed to
+build or execute it. Source compilation belongs to LMScript; the sample only
+loads schema-bound DSLB v6 and exposes its API.
+
+## Host architecture
+
+[Program.cs](src/Program.cs) discovers the exact embedded schema, loads bytecode,
+runs the body, then dispatches `@item` entries for each existing Money handle and
+`@total` entries for Shop.total(), in source order. Other annotations do not run.
+Non-void HALT results still print `entry NAME = VALUE`; `entries_called` remains
+separate from ledger records. Negative ledger balance fails application validation.
+[Shop.cs](src/Shop.cs) owns domain objects through the host Context.
+
+## Invocation result protocol
+
+The host binds one `ResultSink` to the registry before the body and keeps it
+through all selected entry calls. Standard collection regions can end after each
+call without destroying owned result copies. Do not reset the sink in CallEntry.
+Only after complete dispatch and application validation does the host print the
+existing shop diagnostic and call `ResultFrames.Write` on raw stdout.
+
+Success ends with exactly one `LMCODE_RETURN_BEGIN`, compact JSON payload line,
+and `LMCODE_RETURN_END`, each LF-terminated. Unset means a mandatory `null` frame.
+Load/run/application failures emit no frame and retain exits 2/3/4. `$return`
+never substitutes for a function's HALT result. Returned floats use the SDK's
+shortest round-trip serializer; `0.1 + 0.2` emits `0.30000000000000004`.
+
+### Compile-only source shape
+
+```lms
+program = _lmcode_ schema="../sample-suite/sample.dsl.json" out=ARGV[0];
+  $return.total = shop.total().amount();
+end _lmcode_
 ```
 
-Use .NET 8, Node 24 and Python 3 for vendor-lock verification. The pinned suite
-is DSLB v6; current published lmscript compiles its annotated rule entries.
+The `out` expression writes bytecode without executing the host. A CLI-bound
+executing block instead yields the framed value to LMScript. A file-only schema
+requires `out`. The [full contract](sample-suite/CONTRACT.md) defines dispatch and
+canonical test expectations.
 
-## Write a host in C# in ten steps
+## Value boundaries
 
-1. Read the [portable contract](sample-suite/CONTRACT.md) and choose domain
-   objects whose lifetimes are owned by one host process.
-2. Start with [host.schema.json](sample-suite/host.schema.json); it declares
-   contexts, object types, overloads, operators, the `Currency` enum and two
-   SAM interfaces (`Adjuster`, `(Money) -> void`; `Score`, `(Money) -> int`) under `interfaces`.
-3. Add a .NET 8 executable project referencing `vendor/lmcode-csharp/LmCode.csproj`.
-4. Read [the domain model](src/Shop.cs) and [the CLI](src/Program.cs), then
-   register contexts and callbacks with `Registry.Context`, `Function` and
-   `Method`; signatures must match the schema exactly.
-5. Keep handles in `Context`: call `SetObject` for owned objects and use
-   `Context.Get<T>` inside callbacks. `Context` owns the slots; the registry
-   only owns callback declarations.
-6. Map values explicitly: `Value.Int`, `Value.Float`, `Value.Bool`,
-   `Value.Str(VmString.FromString(...))`, `Value.Object`, or `Value.None`.
-7. Treat `VmString` as bytes. Use `Span` for byte-preserving operations and
-   `ToString()` only when the host intentionally decodes UTF-8.
-8. Load bytecode with the exact UTF-8 schema bytes using `Program.Load`, then
-   run its body with the host Context, then enumerate Entries in source order. Call
-   item rules for each existing Money handle and total rules with Shop.total();
-   ignore other annotations. Preserve entry failures as run-phase errors.
-9. Emit one JSON result line and the specified exit code: 0 success, 2 CLI,
-   3 VM/load, and 4 application/setup failure. Keep stderr empty.
-10. Run [test.sh](test.sh), which locks the SDK/corpus and executes every case
-    with byte-identical stdout and exit-code checks.
-
-## Feature coverage
-
-| Feature | Corpus programs |
-|---|---|
-| Literals, arithmetic, conditions, loops, functions, switches | 001–008, 036, 039, 041–045 |
-| Overloads, objects, enums, operators, conversions, fluent and void methods | 009–014, 034–035, 040 |
-| Every standard collection, math, string and file signature | 015–024, 037–038, 048 |
-| Located VM/host errors, numeric assertions, application failure | 025–033 |
-| Raw/dedented heredocs and all outer splice types | 046–047 |
-| Native byte/int64/float/handle/collection boundaries and VM limits | 049–066 |
-| Rule methods, ordered item/total entry dispatch and returned values | 067–069 |
-| Typed maps, Stack/Queue/PQ and immutable JSON | 101–108 |
-| Typed list/map/JSON literals and binding compatibility | 201–205 |
-| Strict Base64/hex and independent map snapshots | 301–305, 311–313 |
-| Malformed bytecode, schema binding and wrong-handle imports | 090–093 |
-
-The [full canonical matrix](sample-suite/README.md) maps every source, bytecode
-and oracle. All 182 v3 standard signatures and the current domain/testing signatures are exercised.
-[Protocol.cs](src/Protocol.cs) preserves raw note bytes in the result JSON;
-text error messages use the SDK's Unicode error API.
-
-## Conversions
-
-| lmcode value | C# representation | Rule |
+| Value | C# representation | Boundary |
 |---|---|---|
-| `string` | `VmString` | Preserve raw bytes; decode UTF-8 deliberately. |
-| `int` | `long` | Signed 64-bit two's-complement arithmetic wraps. |
-| `float` | `double` | Preserve signed zero and non-finite values; format with invariant `G15`. |
-| `bool` | `bool` | Convert only through `Value.AsBool()`. |
-| object handle | `ObjRef` + `Context.Get<T>` | `Context` owns the type-safe object slot. |
-| list/map | SDK collection handles | Fresh per run; callbacks return `Value.Object`. |
-| void | `Value.None` | Never substitute a null object. |
-| host/VM error | `LmCode.Error` | Preserve code and source location at the boundary. |
+| string | `VmString` | Raw bytes; decode only deliberately. |
+| int | `long` | VM arithmetic wraps signed 64-bit; JSON returns require safe mathematical integers. |
+| float | `double` | Existing VM/entry text uses invariant G15; result JSON uses shortest round-trip formatting. |
+| bool | `bool` | `Value.AsBool()`; no numeric coercion. |
+| object | `ObjRef` and `Context.Get<T>` | Context owns typed slots. |
+| collection | SDK handles | Per-region storage; result writes capture owned copies. |
+| void | `Value.None` | Distinct from a null result payload. |
 
-The canonical corpus and expected outputs are vendored snapshots. Update them
-only after a reviewed change in `lmctl-ai/lmcode-cpp`; never edit an expected
-output in this repository to make a failing host appear green.
+[Protocol.cs](src/Protocol.cs) preserves raw note bytes in the shop diagnostic,
+including invalid UTF-8. That diagnostic is separate from the strictly UTF-8
+return frame. Money's float overload accepts finite in-range units and rounds
+half away from zero to int64 cents.
 
-The Money float overload is deliberately narrower than a general lmcode float:
-it accepts finite, in-range units and rounds half away from zero to signed
-int64 cents. NativeAOT uses the same source and can be checked with the publish
-command above; CI proves Linux, macOS and Windows artifacts.
+## Build and verification
 
-NativeAOT prerequisites are documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/).
+Use .NET 8, Node 24, Python 3 and an LMScript compiler built from mono main
+**0bc80277 or later** with the block/out/return cutover. Published compiler
+0.2.448 predates those changes. Source builds may report the historical 0.2.38
+package version; actual compiler capabilities and source SHA are authoritative.
+Set `LMSCRIPT_BIN` to the source-built `lmscript/bin/lmscript`, then run
+`./test.sh`. It forwards to the LMScript test driver.
 
+The gate verifies SDK/suite locks, builds the managed host, audits all **206 std
+and 45 host signatures**, reproduces all **123 bytecode cases**, runs the shared
+runner/frame-oracle controls, and checks exact output/exit/error bytes for every
+case. Local annotated, text-template and raw-note-byte examples are also checked.
+Production-copy C# mutations must compile, then fail independent frame/result
+oracles; compilation errors, signals and unexpected exits do not count as catches.
 
-V3 byte codecs operate on raw `VmString` data: Base64 is canonical padded RFC
-4648, hex output is lowercase, and invalid alphabets/padding/whitespace trap.
-Map `keys()`/`values()` return independent mutable snapshots in insertion order.
-Every one of the 182 standard signatures is imported by this corpus.
+Set `RUN_NATIVE=1` and `RUNTIME_ID=linux-x64`, `linux-arm64`, `osx-arm64`,
+`osx-x64` or `win-x64` to include NativeAOT publishing and repeat the suite and
+host examples against that executable. NativeAOT requires the platform native
+toolchain. No global linking or installation is part of this repository's gate.
 
-The result field entries_called counts successful rule calls; entries retains its
-ledger-record meaning. Value rules print entry NAME = VALUE before the result JSON.
-The same total helper is used by the schema callback and entry dispatch; Money
-objects remain in the host Context for the entire execution.
+## Snapshot maintenance
 
-## lmscript tests and automatic releases
+`scripts/sync-sdk.sh SOURCE` copies committed C# runtime main bytes;
+`scripts/sync-suite.sh SOURCE` copies committed canonical lmcode-cpp main bytes.
+Their lock files record immutable source SHAs and hashes. Never record expected
+outputs from this port or edit vendored canonical files to make a failure pass.
+Refresh them through the existing scripts after a reviewed upstream change.
 
-Install .NET 8, Node 24 and `npm install -g @lmctl-ai/lmctl`. From this repository run `lmscript test.lms` or `lmctl test.lms`; test.sh forwards to lmscript. Set RUN_NATIVE=1 and RUNTIME_ID to linux-x64, linux-arm64, osx-arm64, osx-x64 or win-x64 to include NativeAOT builds and execution (requires the platform native toolchain).
+## Automation boundary
 
-Every main push builds and tests all five platforms, then publishes native executables, licenses and SHA256SUMS to GitHub Releases. Pull requests validate without publishing.
-
-`examples/rule-entries.lms` shows annotated functions implementing Adjuster: the host dispatches @item per item and @total for the total. Case 069 demonstrates returned values. The lmscript driver audits 182 standard and 45 host signatures, reproduces all 108 bytecode cases, runs negative runner controls, and tests managed/native output bytes and the annotated example. `scripts/check-note-bytes.lms` preserves NUL, escaped controls, invalid UTF-8 and multibyte UTF-8 checks. Python is only used for vendored lock maintenance; Node provides binary/process adapters.
-
-## Text templates
-
-[examples/text-template.lms](examples/text-template.lms) renders ordinary text from a nested context with indexed lists, loops and boolean conditions. The standard `template_render(string, Json) -> string` function performs one pass; inserted values stay literal. Compile it with `lmscript --no-preflight examples/text-template.lms build/text-template.dslb`, then run the sample host with `--dsl build/text-template.dslb`.
-
-The lmscript-driven suite runs 108 cases, including template success/error cases. See the [portable template contract](https://github.com/lmctl-ai/lmcode-cpp/blob/main/std/template.md).
+Actions defines five native platforms and installs a compiler selected by its
+input/repository variable/pin. The checked-in old npm pin is not evidence of
+compatibility with the new source syntax. Remote qualification needs a compatible
+compiler; this adoption does not publish one or claim the old pin works.
+Existing release automation is unchanged; no tag or release is created manually.
+See [durable notes](durable-memory/index.md) for the return cutover and evidence.

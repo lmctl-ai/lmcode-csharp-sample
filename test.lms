@@ -17,6 +17,11 @@ step(concat(compiler_command(), ["--no-preflight", "sample-suite/check-recompile
 step(concat(compiler_command(), ["--no-preflight", "sample-suite/test-runner.lms"]));
 mkdir("artifacts");
 step(concat(compiler_command(), ["--no-preflight", "examples/rule-entries.lms", path_join(Directory, "artifacts/rule-entries.dslb")]));
+# Small standalone text-template example, in addition to the shared corpus.
+mkdir("build");
+template_bytecode = path_join(Directory,"build/text-template.dslb");
+step(concat(compiler_command(),["--no-preflight","examples/text-template.lms",template_bytecode]));
+
 fn check_host(host) {
   step(concat(compiler_command(), concat(["--no-preflight", "sample-suite/run-suite.lms"], host)));
   result = invoke(suite_root(), host, ["--dsl", path_join(Directory, "artifacts/rule-entries.dslb")], {}, 30000);
@@ -24,19 +29,16 @@ fn check_host(host) {
   assert(result.code == 0 && result.hex == expected && result.stderr_hex == "", "annotated interface example differs");
   println("PASS annotated interface example");
   step(concat(compiler_command(), concat(["--no-preflight", "scripts/check-note-bytes.lms"], host)));
+  template_result = invoke(root,host,["--dsl",template_bytecode],{},30000);
+  assert(template_result.code == 0 && template_result.stderr_hex == "" && template_result.stdout == "Hello, Sam!\nItems: 0: apple, 1: pear\n{\"ok\": true, \"result\": {\"balance\": 0, \"entries\": 0, \"note\": \"\", \"entries_called\": 0}}\nLMCODE_RETURN_BEGIN\nnull\nLMCODE_RETURN_END\n","text template example differs");
+  println("PASS text template example");
 }
-check_host(["dotnet", path_join(Directory, "src/bin/Release/net8.0/lmcode-csharp-sample.dll")]);
+managed_host = ["dotnet", path_join(Directory, "src/bin/Release/net8.0/lmcode-csharp-sample.dll")];
+step(concat([python, "-B", "scripts/test-return-controls.py"], managed_host));
+check_host(managed_host);
 if (env("RUN_NATIVE") == "1") {
   rid = env("RUNTIME_ID"); assert(rid != "", "RUNTIME_ID is required");
   step(["dotnet", "publish", "src/LmCode.Sample.csproj", "-c", "Release", "-r", rid, "--self-contained", "true", "-p:PublishAot=true", "-p:IlcTreatWarningsAsErrors=true", "-p:StripSymbols=true", "-o", "artifacts/native"]);
   ext = ""; if (env("RUNNER_OS") == "Windows") { ext = ".exe"; }
   check_host([path_join(Directory, "artifacts/native/lmcode-csharp-sample" + ext)]);
 }
-
-# Small standalone text-template example, in addition to the shared corpus.
-mkdir("build");
-template_bytecode = path_join(Directory,"build/text-template.dslb");
-step(concat(compiler_command(),["--no-preflight","examples/text-template.lms",template_bytecode]));
-template_result = invoke(root,["dotnet",path_join(Directory,"src/bin/Release/net8.0/lmcode-csharp-sample.dll")],["--dsl",template_bytecode],{},30000);
-assert(template_result.code == 0 && template_result.stderr_hex == "" && template_result.stdout == "Hello, Sam!\nItems: 0: apple, 1: pear\n{\"ok\": true, \"result\": {\"balance\": 0, \"entries\": 0, \"note\": \"\", \"entries_called\": 0}}\nLMCODE_RETURN_BEGIN\nnull\nLMCODE_RETURN_END\n","text template example differs");
-println("PASS text template example");
