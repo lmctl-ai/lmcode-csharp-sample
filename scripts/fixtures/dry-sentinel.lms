@@ -1,0 +1,7 @@
+program = _lmcode_ schema="../../sample-suite/sample.dsl.json";
+$return.first = money(10).amount();
+ledger.record(money(20));
+$return.ledger_entries = ledger.count();
+file_write(sample_tmp() + "/dry-sentinel", "written");
+@item fn record_item(m: Money) -> void implements Adjuster { ledger.record(m); }
+end _lmcode_

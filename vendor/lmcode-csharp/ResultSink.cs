@@ -24,10 +24,10 @@ public sealed class ResultSink
     }
     public void Reset() {Writable();root=new();}
     public void SetNull() {Writable();Contract.Validate("null");root=new();}
-    public void Set(Context context, Value value) {Writable();Contract.ValidateSource(value);var next=CopyValue(context,value,"");Contract.Validate(Encode(next));root=next;}
+    public void Set(Context context, Value value) {Writable();if(value.IsDryNull){SetNull();return;}Contract.ValidateSource(value);var next=CopyValue(context,value,"");Contract.Validate(Encode(next));root=next;}
     public void Put(Context context, VmString key, Value value)
     {
-        Writable();string name = FieldKey(key);Contract.ValidateSource(value,name);
+        Writable();string name = FieldKey(key);if(value.IsDryNull){PutNull(key);return;}Contract.ValidateSource(value,name);
         var owned = CopyValue(context,value,Pointer("",name));
         PutOwned(key,owned);
     }
@@ -72,6 +72,7 @@ public sealed class ResultSink
         switch (value.Kind)
         {
             case ValueKind.None: return new();
+            case ValueKind.DryNull when value.IsDryNull: return new();
             case ValueKind.Int: return Integer(value.AsInt(),path);
             case ValueKind.Float: return Floating(value.AsFloat(),path);
             case ValueKind.Bool: return new() {Kind="bool",Bool=value.AsBool(),Raw=""};

@@ -58,6 +58,12 @@ public static class ContainersCatalog
 
     private static ObjRef Allocate<T>(Context c, string type, T value) where T : class
         => CollectionsCatalog.Allocate(c, type, value);
+    internal static Value EmptyMap(Context context, string type) => type switch
+    {
+        "IntMap" => Value.Object(type, Allocate(context, type, new Map<long>())),
+        "FloatMap" => Value.Object(type, Allocate(context, type, new Map<double>())),
+        _ => throw Error.Host("unsupported dry map " + type)
+    };
 
     private static void RegisterMap<T>(Registry r, string type, string element, Func<T, Value> put, Func<Value, T> get, Func<Context, IEnumerable<T>, Value> snapshot)
     {

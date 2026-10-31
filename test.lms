@@ -17,6 +17,7 @@ step(concat(compiler_command(), ["--no-preflight", "sample-suite/check-recompile
 step(concat(compiler_command(), ["--no-preflight", "sample-suite/test-runner.lms"]));
 
 fn check_host(host) {
+  step(concat([python, "-B", "scripts/test-dry-host.py"], host));
   step(concat(compiler_command(), concat(["--no-preflight", "sample-suite/run-suite.lms"], host)));
   step(concat(compiler_command(), concat(["--no-preflight", path_join(Directory, "examples/rule-entries.lms")], host)));
   note_command = concat(compiler_command(), concat(["--no-preflight", path_join(Directory, "scripts/check-note-bytes.lms")], host));

@@ -195,6 +195,15 @@ public static class CollectionsCatalog
         => Value.Object("FloatList", Allocate(context, "FloatList", new FloatList(values)));
     public static Value CreateStrMap(Context context, IEnumerable<(VmString Key, VmString Value)> values)
         => Value.Object("StrMap", Allocate(context, "StrMap", new StrMap(values)));
+    internal static Value EmptyDummy(Context context, string type) => type switch
+    {
+        "StrList" => Value.Object(type, Allocate(context, type, new StrList())),
+        "IntList" => Value.Object(type, Allocate(context, type, new IntList())),
+        "FloatList" => Value.Object(type, Allocate(context, type, new FloatList())),
+        "StrMap" => Value.Object(type, Allocate(context, type, new StrMap())),
+        "IntMap" or "FloatMap" => ContainersCatalog.EmptyMap(context, type),
+        _ => throw Error.Host("unsupported dry collection " + type)
+    };
     internal static ObjRef Allocate<T>(Context context, string type, T value) where T : class
     {
         State state = States.GetOrCreateValue(context);

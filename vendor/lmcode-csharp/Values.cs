@@ -22,7 +22,7 @@ public sealed class VmString : IEquatable<VmString>
     public override bool Equals(object? obj) => obj is VmString value && Equals(value);
     public override int GetHashCode() { var h = new HashCode(); foreach (byte b in bytes) h.Add(b); return h.ToHashCode(); }
 }
-public enum ValueKind { None, Int, Float, Str, Bool, Obj }
+public enum ValueKind { None, Int, Float, Str, Bool, Obj, DryNull }
 public readonly record struct ObjRef(int Index);
 public readonly struct Value
 {
@@ -31,16 +31,19 @@ public readonly struct Value
     private readonly double number;
     private readonly VmString? text;
     private readonly ObjRef obj;
+    private readonly bool dryNullProvenance;
     public string TypeName { get; }
-    private Value(ValueKind kind, long integer = 0, double number = 0, VmString? text = null, ObjRef obj = default, string typeName = "")
-    { Kind = kind; this.integer = integer; this.number = number; this.text = text; this.obj = obj; TypeName = typeName; }
+    private Value(ValueKind kind, long integer = 0, double number = 0, VmString? text = null, ObjRef obj = default, string typeName = "", bool dryNullProvenance = false)
+    { Kind = kind; this.integer = integer; this.number = number; this.text = text; this.obj = obj; TypeName = typeName; this.dryNullProvenance = dryNullProvenance; }
     public static Value None => default;
     public static Value Int(long n) => new(ValueKind.Int, integer: n);
     public static Value Float(double n) => new(ValueKind.Float, number: n);
     public static Value Str(VmString s) => new(ValueKind.Str, text: s);
     public static Value Bool(bool b) => new(ValueKind.Bool, integer: b ? 1 : 0);
     public static Value Object(string type, ObjRef obj) => new(ValueKind.Obj, obj: obj, typeName: type);
-    public string KindName => Kind switch { ValueKind.Int => "int", ValueKind.Float => "float", ValueKind.Str => "string", ValueKind.Bool => "bool", ValueKind.Obj => "object", _ => "void" };
+    internal static Value DryNull(string type) => new(ValueKind.DryNull, typeName: type, dryNullProvenance: true);
+    internal bool IsDryNull => Kind == ValueKind.DryNull && dryNullProvenance;
+    public string KindName => Kind switch { ValueKind.Int => "int", ValueKind.Float => "float", ValueKind.Str => "string", ValueKind.Bool => "bool", ValueKind.Obj => "object", ValueKind.DryNull => "dry null", _ => "void" };
     private Error Expected(string kind) => new("RUN_ERROR", $"expected {kind}, got {KindName}");
     public long AsInt() => Kind == ValueKind.Int ? integer : throw Expected("int");
     public double AsFloat() => Kind == ValueKind.Float ? number : throw Expected("float");
@@ -54,6 +57,9 @@ public sealed class Context
     private readonly List<string> types = [];
     private readonly Dictionary<string, ObjRef> names = new(StringComparer.Ordinal);
     private readonly Stack<int> freeCollectionSlots = new();
+    private bool dry;
+    public bool Dry => dry;
+    internal void SetDry(bool value) => dry = value;
     public ObjRef Insert(string type, object value) { var r = new ObjRef(objects.Count); objects.Add(value); types.Add(type); return r; }
     public void Set(string name, ObjRef obj) => names[name] = obj;
     public ObjRef SetObject(string name, string type, object value) { var r = Insert(type, value); Set(name, r); return r; }
@@ -61,6 +67,7 @@ public sealed class Context
     public string TypeName(ObjRef obj) => types[obj.Index];
     public T Get<T>(ObjRef obj) => obj.Index >= 0 && obj.Index < objects.Count && objects[obj.Index] is T value ? value : throw Error.Host($"context object #{obj.Index} has the wrong host type or was taken");
     public T Take<T>(ObjRef obj) { T value = Get<T>(obj); objects[obj.Index] = null; return value; }
+    internal bool HasObject(ObjRef obj, string type) => obj.Index >= 0 && obj.Index < objects.Count && objects[obj.Index] is not null && types[obj.Index] == type;
     public int Count => objects.Count;
     internal ObjRef InsertCollection(string type, object value)
     {

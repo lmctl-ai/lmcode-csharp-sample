@@ -10,19 +10,24 @@ public sealed class InvocationResults
     private sealed record Failure(string Phase,Error Error,int? Part);
     private readonly Slot[] slots;
     private readonly bool builder;
+    public bool Dry {get;}
     private Failure? failure;
     private bool finalized;
     public IReadOnlyList<InvocationRegistration> Registrations {get;}
-    private InvocationResults(bool builder,IEnumerable<InvocationRegistration> registrations,int count) {
-        this.builder=builder;Registrations=Array.AsReadOnly(registrations.ToArray());slots=Enumerable.Range(0,count).Select(_=>new Slot()).ToArray();
+    private InvocationResults(bool builder,bool dry,IEnumerable<InvocationRegistration> registrations,int count) {
+        this.builder=builder;Dry=dry;Registrations=Array.AsReadOnly(registrations.ToArray());slots=Enumerable.Range(0,count).Select(_=>new Slot()).ToArray();
     }
     private static Error Invalid(string text)=>new("CLI_USAGE","lmcode invocation: "+text);
     public static InvocationResults FromMetadata(string raw,IReadOnlyList<string> parsedFiles) => FromMetadata(new UTF8Encoding(false,true).GetBytes(raw),parsedFiles);
     private static InvocationResults FromMetadata(byte[] raw,IReadOnlyList<string> parsedFiles) {
+        bool dryEstablished=false,dryValue=false;
         try {
-            using var doc=InvocationJson.Parse(raw);var root=doc.RootElement;InvocationJson.Keys(root,"version","mode","parts");
+            using var doc=InvocationJson.Parse(raw);var root=doc.RootElement;
             if(!root.TryGetProperty("version",out var version)||!InvocationJson.Integer(version,1))throw new Exception("unsupported version");
             string? mode=root.TryGetProperty("mode",out var modeNode)&&modeNode.ValueKind==System.Text.Json.JsonValueKind.String?modeNode.GetString():null;if(mode is not ("single" or "builder"))throw new Exception("invalid mode");
+            if(!root.TryGetProperty("dry",out var dryNode)||dryNode.ValueKind is not (System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False))throw new Exception("dry must be boolean");bool dry=dryNode.GetBoolean();
+            dryEstablished=true;dryValue=dry;
+            InvocationJson.Keys(root,"version","mode","dry","parts");
             root.TryGetProperty("parts",out var parts);if(parts.ValueKind!=System.Text.Json.JsonValueKind.Array||parts.GetArrayLength()==0||(mode=="single"&&parts.GetArrayLength()!=1))throw new Exception("invalid parts");
             var files=new List<string>();
             foreach(var part in parts.EnumerateArray()) {
@@ -34,8 +39,8 @@ public sealed class InvocationResults
             if(parsedFiles.Count!=files.Count)throw new Exception("registration count mismatch");
             var registrations=new List<InvocationRegistration>();var seen=new HashSet<int>();
             foreach(string file in parsedFiles){int index=files.IndexOf(file);if(index<0)throw new Exception("extra registration");if(!seen.Add(index))throw new Exception("duplicate registration");registrations.Add(new(file,index));}
-            return new(mode=="builder",registrations,files.Count);
-        }catch(Exception e) when(e is not OutOfMemoryException){throw Invalid(e.Message);}
+            return new(mode=="builder",dry,registrations,files.Count);
+        }catch(Exception e) when(e is not OutOfMemoryException){throw Invalid(e.Message).SetInvocationDry(dryEstablished&&dryValue);}
     }
     public static InvocationResults FromCommand(IReadOnlyList<string> parsedFiles)=>FromCommand(parsedFiles,Environment.GetEnvironmentVariable("LMCODE_INVOCATION_FILE"));
     // Null explicitly selects standalone semantics; present-empty metadata is invalid.
@@ -47,8 +52,10 @@ public sealed class InvocationResults
         }
         if(parsedFiles.Count==0)throw Invalid("empty parts");
         foreach(string file in parsedFiles){if(string.IsNullOrEmpty(file)||file.Contains('\0'))throw Invalid("invalid command file");try{_=ResultJson.Quote(file);}catch(Error){throw Invalid("file must be UTF-8");}}
-        return new(parsedFiles.Count>1,parsedFiles.Select((file,index)=>new InvocationRegistration(file,index)),parsedFiles.Count);
+        return new(parsedFiles.Count>1,false,parsedFiles.Select((file,index)=>new InvocationRegistration(file,index)),parsedFiles.Count);
     }
+    /// <summary>Apply the collector's immutable invocation mode to each selected VM context.</summary>
+    public void ApplyMode(Context context) => context.SetDry(Dry);
     private Slot Get(int index)=>index>=0&&index<slots.Length?slots[index]:throw Error.Host("lmcode invocation: invalid slot index");
     private void Active(){if(finalized)throw Error.Host("lmcode invocation: finalized");}
     public ResultSink Select(int index,Registry registry,ResultContract? contract=null) {
@@ -56,6 +63,9 @@ public sealed class InvocationResults
         if(slot.Sink is null){if(failure is not null)throw Error.Host("lmcode invocation: cannot start work after failure");slot.Sink=new ResultSink(contract);}
         slot.Sink.Writable();if(slot.Sink.Contract!=contract)throw Error.Host("lmcode invocation: result contract changed");
         registry.SetResultSink(slot.Sink);return slot.Sink;
+    }
+    public ResultSink Select(int index,Registry registry,Context context,ResultContract? contract=null) {
+        ApplyMode(context);return Select(index,registry,contract);
     }
     public void Complete(int index) {
         Active();var slot=Get(index);if(slot.Sink is null)throw Error.Host("lmcode invocation: slot was not selected");
@@ -70,8 +80,8 @@ public sealed class InvocationResults
         try {
             if(failure is null)for(int i=0;i<slots.Length;i++)if(slots[i].Result is null){Fail(i,"run",Error.Host("lmcode invocation: slot not completed"));break;}
             string json;int code=0;
-            if(failure is not null){json=ResultFrames.FailureJson(failure.Phase,failure.Error,failure.Part);code=ResultFrames.ExitCode(failure.Phase);}
-            else json="{\"ok\":true,\"result\":"+(builder?"["+string.Join(',',slots.Select(s=>s.Result))+"]":slots[0].Result)+(builder?",\"parts\":"+slots.Length:"")+"}";
+            if(failure is not null){json=ResultFrames.FailureJson(failure.Phase,failure.Error,failure.Part,Dry);code=ResultFrames.ExitCode(failure.Phase);}
+            else json="{\"ok\":true,\"result\":"+(builder?"["+string.Join(',',slots.Select(s=>s.Result))+"]":slots[0].Result)+(builder?",\"parts\":"+slots.Length:"")+(Dry?",\"dry\":true":"")+"}";
             finalized=true;return ResultFrames.Emit(output,json,code);
         }catch(Exception){finalized=true;ResultFrames.OutputError();return 4;}
     }
@@ -81,14 +91,14 @@ public sealed class InvocationResults
 public static class ResultFrames
 {
     internal static int ExitCode(string phase)=>phase switch {"cli"=>2,"load" or "run"=>3,"app"=>4,_=>throw Error.Host("lmcode invocation: invalid failure phase")};
-    internal static string FailureJson(string phase,Error e,int? part=null) {
+    internal static string FailureJson(string phase,Error e,int? part=null,bool dry=false) {
         _=ExitCode(phase);
-        return "{\"ok\":false,\"phase\":"+ResultJson.Quote(phase)+",\"code\":"+ResultJson.Quote(e.Code)+",\"message\":"+ResultJson.Quote(e.Message)+(e.Line.HasValue?",\"line\":"+e.Line+(e.Column.HasValue?",\"column\":"+e.Column:""):"")+(part.HasValue?",\"part\":"+part:"")+"}";
+        return "{\"ok\":false,\"phase\":"+ResultJson.Quote(phase)+",\"code\":"+ResultJson.Quote(e.Code)+",\"message\":"+ResultJson.Quote(e.Message)+(e.Line.HasValue?",\"line\":"+e.Line+(e.Column.HasValue?",\"column\":"+e.Column:""):"")+(part.HasValue?",\"part\":"+part:"")+(dry?",\"dry\":true":"")+"}";
     }
     internal static void OutputError(){try{Console.Error.WriteLine("lmcode invocation: cannot write envelope");}catch(Exception){}}
     internal static int Emit(Stream output,string json,int code) {
         try{byte[] bytes=new UTF8Encoding(false,true).GetBytes("LMCODE_RETURN_BEGIN\n"+json+"\nLMCODE_RETURN_END\n");output.Write(bytes);output.Flush();return code;}
         catch(Exception){OutputError();return 4;}
     }
-    public static int FailureFrame(Stream output,string phase,Error error)=>Emit(output,FailureJson(phase,error),ExitCode(phase));
+    public static int FailureFrame(Stream output,string phase,Error error)=>Emit(output,FailureJson(phase,error,dry:error.InvocationDry),ExitCode(phase));
 }

@@ -26,7 +26,7 @@ public sealed record ResultContract
         }catch(Exception e) when(e is not OutOfMemoryException){throw new Error("LOAD_BAD_SCHEMA","lmcode result contract: "+e.Message);}
     }
     private static void Mismatch(string path,string expected,string got)=>throw Error.Host($"lmcode return: result type mismatch at {path}: expected {expected}; got {got}");
-    internal static string Source(Value v)=>v.Kind switch {ValueKind.Int=>"int",ValueKind.Float=>"float",ValueKind.Bool=>"bool",ValueKind.Str=>"string",ValueKind.None=>"null",ValueKind.Obj=>v.TypeName,_=>"handle"};
+    internal static string Source(Value v)=>v.Kind switch {ValueKind.Int=>"int",ValueKind.Float=>"float",ValueKind.Bool=>"bool",ValueKind.Str=>"string",ValueKind.None=>"null",ValueKind.Obj or ValueKind.DryNull=>v.TypeName,_=>"handle"};
     private static bool Assignable(string actual,string expected)=>actual==expected||(actual=="int"&&expected=="float")||(actual=="IntList"&&expected=="FloatList")||(actual=="IntMap"&&expected=="FloatMap");
     internal void ValidateSource(Value v,string? field=null) {
         string actual=Source(v);if(Type is "" or "Json" || actual=="Json")return;

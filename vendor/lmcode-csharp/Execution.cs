@@ -54,8 +54,39 @@ public sealed partial class Program
                     case Op.LOAD_LOCAL: { int slot = reader.U16(); Value v = values[slot]; if (v.Kind == ValueKind.None) throw new Error("RUN_ERROR", $"local slot {slot} read before assignment"); stack.Add(v); break; }
                     case Op.STORE_LOCAL: values[reader.U16()] = Pop(stack); break;
                     case Op.LOAD_CTX: { string name = contexts[reader.U16()]; ObjRef obj = context.Lookup(name) ?? throw new Error("RUN_ERROR", $"context variable '{name}' was not provided by the host for this run"); stack.Add(Value.Object(registry.ContextType(name)!, obj)); break; }
-                    case Op.CALL_FN: { Binding b = imports[reader.U16()]; var a = Args(stack, reader.U8()); Value v = b.Function!(context, a); if (v.Kind != ValueKind.None) stack.Add(v); break; }
-                    case Op.CALL_METHOD: { Binding b = imports[reader.U16()]; var a = Args(stack, reader.U8()); Value self = Pop(stack); if (self.Kind != ValueKind.Obj || self.TypeName != b.TypeName) throw new Error("RUN_ERROR", $"method {b.TypeName}.{b.Name} called on a {(self.Kind == ValueKind.Obj ? self.TypeName : self.KindName)}"); ObjRef obj = self.AsObj(); Value v = b.Method!(context, obj, a); if (v.Kind != ValueKind.None) stack.Add(v); break; }
+                    case Op.CALL_FN:
+                    {
+                        Binding b = imports[reader.U16()]; var a = Args(stack, reader.U8());
+                        if (a.Any(value => value.IsDryNull)) throw Error.Host("dry null cannot be passed to a host callback");
+                        Value v;
+                        if (context.Dry)
+                        {
+                            v = b.DryFunction is null ? owner.DryDummy(context, b.Returns) : b.DryFunction(context, a);
+                            if (b.DryFunction is not null) ValidateDryResult(context, b, v);
+                        }
+                        else v = b.Function!(context, a);
+                        if (v.Kind != ValueKind.None) stack.Add(v); break;
+                    }
+                    case Op.CALL_METHOD:
+                    {
+                        Binding b = imports[reader.U16()]; var a = Args(stack, reader.U8()); Value self = Pop(stack);
+                        if (a.Any(value => value.IsDryNull)) throw Error.Host("dry null cannot be passed to a host callback");
+                        if (self.Kind == ValueKind.DryNull)
+                        {
+                            if (!context.Dry || !self.IsDryNull) throw Error.Host("invalid dry null provenance in method receiver");
+                            if (b.DryMethod is null) { Value skipped = owner.DryDummy(context, b.Returns); if (skipped.Kind != ValueKind.None) stack.Add(skipped); break; }
+                            throw Error.Host($"method {b.TypeName}.{b.Name} requires a concrete receiver after dry null");
+                        }
+                        if (self.Kind != ValueKind.Obj || self.TypeName != b.TypeName) throw new Error("RUN_ERROR", $"method {b.TypeName}.{b.Name} called on a {(self.Kind == ValueKind.Obj ? self.TypeName : self.KindName)}");
+                        ObjRef obj = self.AsObj(); Value v;
+                        if (context.Dry)
+                        {
+                            v = b.DryMethod is null ? owner.DryDummy(context, b.Returns) : b.DryMethod(context, obj, a);
+                            if (b.DryMethod is not null) ValidateDryResult(context, b, v);
+                        }
+                        else v = b.Method!(context, obj, a);
+                        if (v.Kind != ValueKind.None) stack.Add(v); break;
+                    }
                     case Op.EQ: { Value b = Pop(stack), a = Pop(stack); stack.Add(Value.Bool(Equal(a, b))); break; }
                     case Op.NE: { Value b = Pop(stack), a = Pop(stack); stack.Add(Value.Bool(!Equal(a, b))); break; }
                     case Op.NOT: stack.Add(Value.Bool(!Unary(stack, ValueKind.Bool, "! applied to a").AsBool())); break;
@@ -103,6 +134,21 @@ public sealed partial class Program
         }
         finally { owner.ExitRun(context); }
         return Value.None;
+    }
+    private static void ValidateDryResult(Context context, Binding binding, Value value)
+    {
+        string expected = binding.Returns;
+        bool valid = expected switch
+        {
+            "void" => value.Kind == ValueKind.None,
+            "null" => value.IsDryNull && value.TypeName == "null",
+            "bool" => value.Kind == ValueKind.Bool,
+            "int" => value.Kind == ValueKind.Int,
+            "float" => value.Kind == ValueKind.Float,
+            "string" => value.Kind == ValueKind.Str,
+            _ => value.IsDryNull && value.TypeName == expected || value.Kind == ValueKind.Obj && value.TypeName == expected && context.HasObject(value.AsObj(), expected)
+        };
+        if (!valid) throw Error.Host($"dry callback for {binding.Returns} returned {value.KindName}");
     }
     private static Value Unary(List<Value> stack, ValueKind kind, string operation)
     {
