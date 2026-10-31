@@ -15,6 +15,7 @@ public sealed class Registry
     public void SetResultSink(ResultSink? sink)
     {
         if (!defaultCollections) throw Error.Host("std: registry has standard library disabled");
+        sink?.Writable();
         resultSink=sink;
     }
     internal ResultSink RequiredResultSink() => resultSink ?? throw Error.Host("lmcode return: no result sink");

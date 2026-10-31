@@ -15,7 +15,18 @@ public static class ResultJson
         if (double.IsNaN(value) || double.IsInfinity(value)) throw Invalid(path, "nonfinite");
         if (value == 0) return "0";
         if (value == Math.Truncate(value) && Math.Abs(value) > Safe) throw Invalid(path, "unsafe_integer");
-        return value.ToString(CultureInfo.InvariantCulture);
+        // Keep the runtime's shortest round-trip digits, with C++ general layout.
+        string raw=value.ToString("R",CultureInfo.InvariantCulture);
+        string sign=raw.StartsWith('-')?"-":"";raw=raw.TrimStart('-');
+        string[] pieces=raw.Split(['e','E']);string mantissa=pieces[0];
+        int power=pieces.Length==2?int.Parse(pieces[1],CultureInfo.InvariantCulture):0;
+        int point=mantissa.IndexOf('.');if(point<0)point=mantissa.Length;
+        string all=mantissa.Replace(".","");int leading=all.Length-all.TrimStart('0').Length;
+        string digits=all.TrimStart('0').TrimEnd('0');int exponent=power+point-leading-1;
+        if(exponent < -4 || exponent >= 6)
+            return sign+digits[0]+(digits.Length>1?"."+digits[1..]:"")+"e"+(exponent<0?"-":"+")+Math.Abs(exponent).ToString("D2",CultureInfo.InvariantCulture);
+        int position=exponent+1;
+        return sign+(position<=0?"0."+new string('0',-position)+digits:position>=digits.Length?digits+new string('0',position-digits.Length):digits[..position]+"."+digits[position..]);
     }
 
     public static string ValidateNumberToken(string token, string path = "")

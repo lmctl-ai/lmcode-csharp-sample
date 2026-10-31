@@ -77,9 +77,17 @@ public static class JsonCatalog
             }
             return node;
         }
-        public Node Parse() { Node n = Value(); Skip(); if (p != input.Length) Fail("trailing input", p); return n; }
+        public Node Parse(bool invocation=false) { Node n = Value(); Skip(); if (p != input.Length) {if(invocation)throw Error.Host("trailing JSON input");Fail("trailing input", p);} return n; }
     }
 
+
+    // Reuse the byte parser so metadata errors have the reference diagnostic and offset.
+    internal static Node ParseInvocation(ReadOnlySpan<byte> bytes) {
+        try { _=new UTF8Encoding(false,true).GetString(bytes); }
+        catch(DecoderFallbackException e){throw Error.Host($"json_parse: invalid UTF-8 at byte {e.Index}");}
+        if(bytes.StartsWith(new byte[]{0xef,0xbb,0xbf}))throw Error.Host("JSON BOM is not allowed");
+        return new Parser(bytes).Parse(true);
+    }
 
     private const string TemplatePath = @"[A-Za-z_][A-Za-z0-9_]*(?:[.][A-Za-z_][A-Za-z0-9_]*|\[[0-9]+\])*";
     private static readonly System.Text.RegularExpressions.Regex TemplateHead = new("^<("+TemplatePath+@")(?::\{([A-Za-z_][A-Za-z0-9_]*)\||>)");

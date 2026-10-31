@@ -9,39 +9,41 @@ loads schema-bound lmcode bytecode (DSLB v6) and exposes its API.
 
 ## Host architecture
 
-[Program.cs](src/Program.cs) discovers the exact embedded schema, loads bytecode,
-runs the body, then dispatches `@item` entries for each existing Money handle and
-`@total` entries for Shop.total(), in source order. Other annotations do not run.
+[Program.cs](src/Program.cs) discovers the exact embedded schema, parses repeated
+`--lmcode FILE` inputs plus the `--first`/`--last` role flags, and dispatches all
+parts through one Host, Context and Ledger. `@item` entries run for each existing
+Money handle and `@total` entries run for Shop.total(); other annotations do not run.
 Non-void HALT results still print `entry NAME = VALUE`; `entries_called` remains
 separate from ledger records. Negative ledger balance fails application validation.
 [Shop.cs](src/Shop.cs) owns domain objects through the host Context.
 
 ## Invocation result protocol
 
-The host binds one `ResultSink` to the registry before the body and keeps it
-through all selected entry calls. Standard collection regions can end after each
-call without destroying owned result copies. Do not reset the sink in CallEntry.
-Only after complete dispatch and application validation does the host print the
-existing shop diagnostic and call `ResultFrames.Write` on raw stdout.
+Each input selects its own `ResultSink`, retained from its body through its entry
+calls. Host state is shared, while results remain in add order even when roles
+change execution order. After all parts and application validation pass, the host
+prints one tagged `host_summary` diagnostic and the SDK writes one result envelope.
 
-Success ends with exactly one `LMCODE_RETURN_BEGIN`, compact JSON payload line,
-and `LMCODE_RETURN_END`, each LF-terminated. Unset means a mandatory `null` frame.
-Load/run/application failures emit no frame and retain exits 2/3/4. `$return`
-never substitutes for a function's HALT result. Returned floats use the SDK's
-shortest round-trip serializer; `0.1 + 0.2` emits `0.30000000000000004`.
+Success ends with exactly one `LMCODE_RETURN_BEGIN`, compact JSON envelope line,
+and `LMCODE_RETURN_END`, each LF-terminated. Builder results include an ordered
+array and required `parts`; failures have no result payload and retain exits 2/3/4.
+`$return` never substitutes for a function's HALT result. Returned floats use the
+SDK's shortest round-trip serializer; `0.1 + 0.2` emits `0.30000000000000004`.
 
-### Compile-only source shape
+### Reusable program example
 
 ```lms
-program = _lmcode_ schema="../sample-suite/sample.dsl.json" out=ARGV[0];
+schema = load_schema(cli=ARGV[0]);
+program = _lmcode_ schema;
   $return.total = shop.total().amount();
 end _lmcode_
+r = run_lmcode(program);
+require(r.ok, "sample host failed");
 ```
 
-The `out` expression writes bytecode without executing the host. A CLI-bound
-executing block instead yields the framed value to LMScript. A file-only schema
-requires `out`. The [full contract](sample-suite/CONTRACT.md) defines dispatch and
-canonical test expectations.
+The program is immutable and reusable; each `run_lmcode` call executes it once.
+The [full contract](sample-suite/CONTRACT.md) defines dispatch and canonical
+test expectations.
 
 ## Value boundaries
 
@@ -55,9 +57,9 @@ canonical test expectations.
 | collection | SDK handles | Per-region storage; result writes capture owned copies. |
 | void | `Value.None` | Distinct from a null result payload. |
 
-[Protocol.cs](src/Protocol.cs) preserves raw note bytes in the shop diagnostic,
+[Protocol.cs](src/Protocol.cs) preserves raw note bytes in the tagged host summary,
 including invalid UTF-8. That diagnostic is separate from the strictly UTF-8
-return frame. Money's float overload accepts finite in-range units and rounds
+return envelope. Money's float overload accepts finite in-range units and rounds
 half away from zero to int64 cents.
 
 ## Build and verification

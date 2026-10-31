@@ -1,37 +1,27 @@
-# Invocation return cutover — slice 7
+# Multi-program invocation protocol — slice 7
 
-## Ownership and output
+## Host behavior
 
-Program.cs constructs one ResultSink, binds it with Registry.SetResultSink before
-body execution, and retains it across all selected item/total calls. ResultSink
-is outside the standard collection arenas. HALT/entry diagnostics and shop domain
-state are unchanged. Only successful app validation reaches ResultFrames.Write,
-after Protocol.Success. Failure paths return before framing. Raw stdout writes
-preserve LF bytes under Windows and NativeAOT.
+`Program.cs` parses repeated `--lmcode FILE`, `--first FILE`, and `--last FILE`
+pairs. One Host, Context and Ledger are shared across all parts. Role flags set
+stable execution priorities; `InvocationResults` retains one result sink per
+canonical input index and emits results in add order. Load/run failures retain
+their part association, global application validation omits it, and failure
+envelopes carry no partial result.
 
-## Pins and compiler
+Success prints one tagged `host_summary` diagnostic, then exactly one SDK result
+envelope. The SDK owns frame bytes, aggregate order, failure shape, and exit code.
+Keep note diagnostics byte-preserving, including invalid UTF-8, and do not reset a
+part sink between body and selected entry calls.
 
-SDK: lmcode-csharp 3f893cee64b674f9b91ba633d4019c8ea5ea2f27.
-Suite: lmcode-cpp 249af7744ab95caa20094493a2934a3916f46956.
-Its suite bytes are identical to slice 6 at 6ee3d62.
-Both snapshots came through this repo's own sync scripts. The canonical suite
-uses out=ARGV[0], not savedsl. Local examples and the raw-note wrapper follow it.
-Build a mono main compiler at 0bc80277 or later; the adoption was qualified with
-177e38ca. The npm 0.2.448 compiler lacks this syntax. Do not lower the compiler
-gate or rewrite expectations to accommodate the old compiler.
+## Pins and verification
 
-## Regression evidence
+- SDK `lmcode-csharp` at `ba73ed5c36c479a60c6ae8c8d674c55fea73234d`.
+- Canonical suite `lmcode-cpp` at `afae84a49d3c5a9557080a04a1e41f990b4db8ca`.
+- Build local compiler checks from a private Mono main worktree; published compiler
+  pins may lag the language API.
 
-Before implementation, the old host succeeded on case 001 but the independent
-canonical oracle rejected missing terminal frame. The host mutation script
-first checks exact baseline output/exit/stderr for null, shortest float,
-entry-lifetime and failed entry/app cases. It then builds production-copy hosts
-which omit framing or reset the sink before every entry. Both must keep their
-normal successful exit and empty stderr but fail the precise independent oracle.
-Build failures/crashes are harness errors, never caught mutants.
-
-The normal gate runs ten Python/Node frame-oracle controls, 123 canonical cases,
-bytecode reproduction, signature reachability, runner controls, raw-note bytes,
-and annotated/text-template examples. RUN_NATIVE=1 repeats the execution suite
-and host examples with NativeAOT. Only the native platform actually run locally
-is qualified; other OS results require their own compatible compiler and gate.
+The sample gate checks the 123-case byte/exit corpus, reusable single/builder
+programs, shared ledger state, tagged summaries, result contracts, note bytes,
+examples, and compiled production-copy adapter mutants. NativeAOT is qualified only
+on platforms explicitly run locally.

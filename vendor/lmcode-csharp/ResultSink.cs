@@ -9,6 +9,11 @@ public sealed class ResultSink
 {
     private const long SafeInteger = 9_007_199_254_740_991;
     private JsonCatalog.Node root = new();
+    public ResultContract Contract { get; }
+    public bool IsSealed { get; private set; }
+    public ResultSink(ResultContract? contract=null) => Contract=contract ?? new();
+    internal void Writable() {if(IsSealed)throw Error.Host("lmcode return: result sink is sealed");}
+    public string Seal() {Writable();Contract.Validate(Json());IsSealed=true;return Json();}
     internal static Error Invalid(string path, string reason) => Error.Host($"lmcode return: invalid JSON value at {path}: {reason}");
     internal static string Pointer(string parent, string key) => parent + "/" + key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
     private static string Key(VmString key, string path)
@@ -17,16 +22,16 @@ public sealed class ResultSink
         try { return new UTF8Encoding(false,true).GetString(key.Span); }
         catch (DecoderFallbackException) { throw Invalid(path,"utf8"); }
     }
-    public void Reset() => root = new();
-    public void SetNull() => Reset();
-    public void Set(Context context, Value value) => root = CopyValue(context,value,"");
+    public void Reset() {Writable();root=new();}
+    public void SetNull() {Writable();Contract.Validate("null");root=new();}
+    public void Set(Context context, Value value) {Writable();Contract.ValidateSource(value);var next=CopyValue(context,value,"");Contract.Validate(Encode(next));root=next;}
     public void Put(Context context, VmString key, Value value)
     {
-        string name = FieldKey(key);
+        Writable();string name = FieldKey(key);Contract.ValidateSource(value,name);
         var owned = CopyValue(context,value,Pointer("",name));
         PutOwned(key,owned);
     }
-    public void PutNull(VmString key) { _ = FieldKey(key); PutOwned(key,new()); }
+    public void PutNull(VmString key) {Writable(); _ = FieldKey(key); PutOwned(key,new()); }
     private string FieldKey(VmString key)
     {
         if (root.Kind is not ("null" or "object")) throw Error.Host("lmcode return: field assignment requires object or null");
@@ -34,14 +39,11 @@ public sealed class ResultSink
     }
     private void PutOwned(VmString key, JsonCatalog.Node owned)
     {
-        if (root.Kind == "null") {
-            var next = new JsonCatalog.Node {Kind="object",Raw=""};
-            next.Object.Add((new VmString(key.Span),"",owned));
-            root=next;return;
-        }
-        for (int i=0;i<root.Object.Count;i++)
-            if (root.Object[i].Key.Equals(key)) { root.Object[i]=(root.Object[i].Key,"",owned); return; }
-        root.Object.Add((new VmString(key.Span),"",owned));
+        var next=root.Kind=="null"?new JsonCatalog.Node {Kind="object",Raw=""}:CopyNode(root,"",new(ReferenceEqualityComparer.Instance));
+        int index=next.Object.FindIndex(member=>member.Key.Equals(key));
+        if(index>=0)next.Object[index]=(next.Object[index].Key,"",owned);
+        else next.Object.Add((new VmString(key.Span),"",owned));
+        Contract.Validate(Encode(next));root=next;
     }
     public string Json() => Encode(root);
     private static JsonCatalog.Node Integer(long value,string path)
@@ -125,6 +127,7 @@ public sealed class ResultSink
         foreach (char c in raw) { if (c is 'e' or 'E') break; if (c is >= '1' and <= '9') return true; }
         return false;
     }
+    internal static void ValidateNode(JsonCatalog.Node node) => _=CopyNode(node,"",new(ReferenceEqualityComparer.Instance));
     private static JsonCatalog.Node CopyNode(JsonCatalog.Node? node,string path,HashSet<JsonCatalog.Node> active)
     {
         if (node is null) throw Invalid(path,"handle");
@@ -171,17 +174,4 @@ public sealed class ResultSink
         "object"=>"{"+string.Join(',',node.Object.Select(member=>ResultJson.Quote(member.Key)+":"+Encode(member.Value)))+"}",
         _=>throw Invalid("","handle"),
     };
-}
-
-/// <summary>Explicit successful-host framing; never called implicitly by the VM.</summary>
-public static class ResultFrames
-{
-    public static byte[] Encode(ResultSink sink) => new UTF8Encoding(false,true).GetBytes("LMCODE_RETURN_BEGIN\n"+sink.Json()+"\nLMCODE_RETURN_END\n");
-    /// <summary>Call only after the body, selected entries and app validation succeed.</summary>
-    public static void Write(Stream output,ResultSink sink)
-    {
-        byte[] frame=Encode(sink);
-        try { output.Write(frame); output.Flush(); }
-        catch(IOException) { throw Error.Host("lmcode return: cannot write result frame"); }
-    }
 }
