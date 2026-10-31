@@ -5,7 +5,7 @@
 This .NET 8 host embeds the checked-in [C# runtime](vendor/lmcode-csharp) and
 [canonical portable suite](sample-suite). No sibling checkout is needed to
 build or execute it. Source compilation belongs to LMScript; the sample only
-loads schema-bound DSLB v6 and exposes its API.
+loads schema-bound lmcode bytecode (DSLB v6) and exposes its API.
 
 ## Host architecture
 
@@ -97,3 +97,7 @@ compatibility with the new source syntax. Remote qualification needs a compatibl
 compiler; this adoption does not publish one or claim the old pin works.
 Existing release automation is unchanged; no tag or release is created manually.
 See [durable notes](durable-memory/index.md) for the return cutover and evidence.
+
+## Historical literal names
+
+The documentation calls the language lmcode. `--dsl`, `--dsl-schema` and `--dsl-signatures` are current host flag literals; `DSLB` is the bytecode magic and `DSLB v6` is the current format name; `.dslb` is the current bytecode filename extension. Other code-formatted API names, paths, manifest names and diagnostic text retain their current literal spellings.
