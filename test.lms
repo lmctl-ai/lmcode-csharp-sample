@@ -24,12 +24,12 @@ step(concat(compiler_command(),["--no-preflight","examples/text-template.lms",te
 
 fn check_host(host) {
   step(concat(compiler_command(), concat(["--no-preflight", "sample-suite/run-suite.lms"], host)));
-  result = invoke(suite_root(), host, ["--dsl", path_join(Directory, "artifacts/rule-entries.dslb")], {}, 30000);
+  result = invoke(suite_root(), host, ["--lmcode", path_join(Directory, "artifacts/rule-entries.dslb")], {}, 30000);
   expected = binary(suite_root(), {op:"hex", path:path_join(suite_root(), "expected/068-rule-entries.out")});
   assert(result.code == 0 && result.hex == expected && result.stderr_hex == "", "annotated interface example differs");
   println("PASS annotated interface example");
   step(concat(compiler_command(), concat(["--no-preflight", "scripts/check-note-bytes.lms"], host)));
-  template_result = invoke(root,host,["--dsl",template_bytecode],{},30000);
+  template_result = invoke(root,host,["--lmcode",template_bytecode],{},30000);
   assert(template_result.code == 0 && template_result.stderr_hex == "" && template_result.stdout == "Hello, Sam!\nItems: 0: apple, 1: pear\n{\"ok\": true, \"result\": {\"balance\": 0, \"entries\": 0, \"note\": \"\", \"entries_called\": 0}}\nLMCODE_RETURN_BEGIN\nnull\nLMCODE_RETURN_END\n","text template example differs");
   println("PASS text template example");
 }

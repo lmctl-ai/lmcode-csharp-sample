@@ -19,19 +19,19 @@ try
     byte[] schema = schemaStream.ToArray();
     var host = new Host();
     if (args is ["--version"]) { Console.WriteLine("lmcode-csharp-sample " + Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion); return 0; }
-    if (args is ["--dsl-schema"] or ["--dsl-schema", "--json"])
+    if (args is ["--lmcode-schema"] or ["--lmcode-schema", "--json"])
     {
         Console.OpenStandardOutput().Write(schema);
         return 0;
     }
-    if (args is ["--dsl-signatures"])
+    if (args is ["--lmcode-signatures"])
     {
         foreach (string signature in host.Registry.Signatures()) Console.WriteLine(signature);
         return 0;
     }
-    if (args is not ["--dsl", var path])
+    if (args is not ["--lmcode", var path])
     {
-        Console.WriteLine(Reports.ErrorJson("cli", new Error("CLI_USAGE", "usage: --version | --dsl-schema [--json] | --dsl-signatures | --dsl FILE")));
+        Console.WriteLine(Reports.ErrorJson("cli", new Error("CLI_USAGE", "usage: --version | --lmcode-schema [--json] | --lmcode-signatures | --lmcode FILE")));
         return 2;
     }
 

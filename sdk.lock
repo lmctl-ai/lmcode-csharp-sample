@@ -1,6 +1,6 @@
 {
   "repo": "lmctl-ai/lmcode-csharp",
-  "commit": "3f893cee64b674f9b91ba633d4019c8ea5ea2f27",
+  "commit": "931e0edc73bf732fa8cb67316fee2acea764cc8a",
   "sha256": {
     "Errors.cs": "235fa55e3330ce762112f13c3bd07c686577d8e5d4bdf974b318636f135edc92",
     "Execution.cs": "d5abc3b21ea35d124d79ce497d528e0ec47be9f4b229577434e74f9b027efc3c",
