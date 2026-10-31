@@ -223,7 +223,7 @@ reproducing all compatible cases. A v2 or otherwise unknown compiler failure is
 an error; `LMCODE_REQUIRE_LITERAL_COMPILER=1` also makes v1 gaps fatal. Runtime
 execution always covers the entire corpus, regardless of compiler capabilities.
 
-Std v3 adds programs 301–305: strict byte codecs, all six map snapshots, independent mutation and exact decoder errors. The corpus has 108 cases, including text-template success/error coverage, and runs across C++, C, Go, Java, Kotlin, Scala, Rust and C#.
+Std v3 adds programs 301–305: strict byte codecs, all six map snapshots, independent mutation and exact decoder errors. The corpus has 123 cases, including text-template success/error coverage, and runs across C++, C, Go, Java, Kotlin, Scala, Rust and C#.
 
 Reviewer cases 311–313 extend v3 coverage with binary padding boundaries, bidirectional snapshot mutation and the exact noncanonical Base64 trap.
 
