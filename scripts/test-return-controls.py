@@ -39,11 +39,11 @@ def main():
     baseline(command)
     source = (ROOT / 'src/Program.cs').read_text()
     mutants = (
-        ('missing-frame', 'return results.WriteFrame(Console.OpenStandardOutput());',
-         'return 0; /* deliberately omit terminal frame */', '001-literals',
+        ('missing-frame', 'if (!failed) Protocol.HostSummary(host.Ledger, entriesCalled, invocation.Dry ? host.DryMoneyPreviewCalls : null);\n    return invocation.WriteFrame(Console.OpenStandardOutput());',
+         'if (!failed) Protocol.HostSummary(host.Ledger, entriesCalled, invocation.Dry ? host.DryMoneyPreviewCalls : null);\n    return 0; /* deliberately omit terminal frame */', '001-literals',
          'missing, duplicate or nonterminal invocation frame'),
         ('reset-per-entry', 'Value value = program.Call(',
-         'results.Select(part.Index, host.Registry, contract).Reset();\n                Value value = program.Call(', '364-return-entry-lifetime',
+         'invocation.Select(part.Index, host.Registry, host.Context, contract).Reset();\n                Value value = program.Call(', '364-return-entry-lifetime',
          'result differs from independent oracle'),
     )
     artifacts = ROOT / 'artifacts'

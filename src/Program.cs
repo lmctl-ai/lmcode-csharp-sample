@@ -15,20 +15,21 @@ Console.Out.NewLine = "\n";
 static int Failure(string phase, Error error) => ResultFrames.FailureFrame(Console.OpenStandardOutput(), phase, error);
 static int Usage() => Failure("cli", new Error("CLI_USAGE", "usage: --version | --lmcode-schema [--json] | --lmcode-signatures | [--first|--lmcode|--last] FILE ..."));
 
+InvocationResults? invocation = null;
 try
 {
-    using Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("sample.schema")!;
-    using var schemaStream = new MemoryStream();
-    resource.CopyTo(schemaStream);
-    byte[] schema = schemaStream.ToArray();
-    string schemaText = Encoding.UTF8.GetString(schema);
-    var host = new Host();
-
     if (args is ["--version"])
     {
         Console.WriteLine("lmcode-csharp-sample " + Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion);
         return 0;
     }
+
+    using Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("sample.schema")!;
+    using var schemaStream = new MemoryStream();
+    resource.CopyTo(schemaStream);
+    byte[] schema = schemaStream.ToArray();
+    string schemaText = Encoding.UTF8.GetString(schema);
+
     if (args is ["--lmcode-schema"] or ["--lmcode-schema", "--json"])
     {
         Console.OpenStandardOutput().Write(schema);
@@ -36,7 +37,9 @@ try
     }
     if (args is ["--lmcode-signatures"])
     {
-        foreach (string signature in host.Registry.Signatures()) Console.WriteLine(signature);
+        // Introspection has no invocation body and therefore always uses real-mode setup.
+        var introspectionHost = new Host(null);
+        foreach (string signature in introspectionHost.Registry.Signatures()) Console.WriteLine(signature);
         return 0;
     }
 
@@ -51,17 +54,37 @@ try
     }
     if (parsedFiles.Count == 0) return Usage();
 
-    InvocationResults results;
-    try { results = InvocationResults.FromCommand(parsedFiles); }
+    // Parse the invocation mode before constructing the sample Host or setting up shop state.
+    try { invocation = InvocationResults.FromCommand(parsedFiles); }
     catch (Error error) { return Failure("cli", error); }
-    var contract = ResultContract.FromSchema(schemaText);
+
+    ResultContract contract;
+    try { contract = ResultContract.FromSchema(schemaText); }
+    catch (Error error)
+    {
+        invocation.Fail(null, "load", error);
+        return invocation.WriteFrame(Console.OpenStandardOutput());
+    }
+
+    Host host;
+    try { host = new Host(invocation); }
+    catch (Error error)
+    {
+        invocation.Fail(null, "app", error);
+        return invocation.WriteFrame(Console.OpenStandardOutput());
+    }
+    catch (Exception)
+    {
+        invocation.Fail(null, "app", new Error("APP_FAIL", "cannot read sample input"));
+        return invocation.WriteFrame(Console.OpenStandardOutput());
+    }
+
     var executionOrder = Enumerable.Range(0, parsedFiles.Count).OrderBy(index => priorities[index]);
     int entriesCalled = 0;
     bool failed = false;
-
     foreach (int position in executionOrder)
     {
-        InvocationRegistration part = results.Registrations[position];
+        InvocationRegistration part = invocation.Registrations[position];
         string phase = "load";
         try
         {
@@ -78,7 +101,7 @@ try
                 throw new Error(error.Code, message);
             }
 
-            results.Select(part.Index, host.Registry, contract);
+            invocation.Select(part.Index, host.Registry, host.Context, contract);
             phase = "run";
             program.Run(host.Context, host.Registry);
             var entries = program.Entries;
@@ -94,17 +117,17 @@ try
                     foreach (ObjRef item in host.Shop.Items.Values) CallEntry(i, Value.Object("Money", item));
                 else if (entries[i].Annotation == "total") CallEntry(i, host.TotalHandle());
             }
-            results.Complete(part.Index);
+            invocation.Complete(part.Index);
         }
         catch (Error error)
         {
-            results.Fail(part.Index, phase, error);
+            invocation.Fail(part.Index, phase, error);
             failed = true;
             break;
         }
         catch (Exception)
         {
-            results.Fail(part.Index, "app", new Error("APP_FAIL", "cannot read sample input"));
+            invocation.Fail(part.Index, "app", new Error("APP_FAIL", "cannot read sample input"));
             failed = true;
             break;
         }
@@ -112,11 +135,27 @@ try
 
     if (!failed && host.Ledger.Balance < 0)
     {
-        results.Fail(null, "app", new Error("APP_FAIL", "ledger: negative balance"));
+        invocation.Fail(null, "app", new Error("APP_FAIL", "ledger: negative balance"));
         failed = true;
     }
-    if (!failed) Protocol.HostSummary(host.Ledger, entriesCalled);
-    return results.WriteFrame(Console.OpenStandardOutput());
+    if (!failed) Protocol.HostSummary(host.Ledger, entriesCalled, invocation.Dry ? host.DryMoneyPreviewCalls : null);
+    return invocation.WriteFrame(Console.OpenStandardOutput());
 }
-catch (Error error) { return Failure("cli", error); }
-catch (Exception) { return Failure("app", new Error("APP_FAIL", "cannot read sample input")); }
+catch (Error error)
+{
+    if (invocation is not null)
+    {
+        invocation.Fail(null, "app", error);
+        return invocation.WriteFrame(Console.OpenStandardOutput());
+    }
+    return Failure("cli", error);
+}
+catch (Exception)
+{
+    if (invocation is not null)
+    {
+        invocation.Fail(null, "app", new Error("APP_FAIL", "cannot read sample input"));
+        return invocation.WriteFrame(Console.OpenStandardOutput());
+    }
+    return Failure("app", new Error("APP_FAIL", "cannot read sample input"));
+}

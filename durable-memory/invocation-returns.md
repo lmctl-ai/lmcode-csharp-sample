@@ -16,8 +16,8 @@ part sink between body and selected entry calls.
 
 ## Pins and verification
 
-- SDK `lmcode-csharp` at `ba73ed5c36c479a60c6ae8c8d674c55fea73234d`.
-- Canonical suite `lmcode-cpp` at `afae84a49d3c5a9557080a04a1e41f990b4db8ca`.
+- SDK `lmcode-csharp` is pinned in `sdk.lock` to the H4 dry-slot implementation.
+- Canonical suite `lmcode-cpp` is pinned in `suite.lock` to H0 dry fixtures.
 - Build local compiler checks from a private Mono main worktree; published compiler
   pins may lag the language API.
 
@@ -25,3 +25,13 @@ The sample gate checks the 123-case byte/exit corpus, reusable single/builder
 programs, shared ledger state, tagged summaries, result contracts, note bytes,
 examples, and compiled production-copy adapter mutants. NativeAOT is qualified only
 on platforms explicitly run locally.
+
+## H6 dry-mode adoption
+
+The adapter parses `InvocationResults.FromCommand` before constructing `Host`, then
+copies `results.Dry` to `Context` before any host setup. Dry setup leaves live shop
+items unseeded. The `money` overloads provide previews, `Money.amount` and
+`sample_tmp` use safe read callbacks, and `Ledger.record`/file writes skip by
+default. `scripts/test-dry-host.py` runs one private lmcode program in dry and real
+modes: dry preserves the ledger and file sentinel, checks preview counts, and emits
+the required dry envelope; real mode still updates state and writes the file.

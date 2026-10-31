@@ -22,7 +22,7 @@ static class Protocol
 
     // JSON syntax is ASCII; bytes >= 0x20 pass through unchanged, matching the
     // reference host. Decoding a VmString first would replace invalid UTF-8.
-    public static void HostSummary(Ledger ledger, int entriesCalled)
+    public static void HostSummary(Ledger ledger, int entriesCalled, int? dryPreviewCalls = null)
     {
         using var bytes = new MemoryStream();
         bytes.Write(Encoding.ASCII.GetBytes($"{{\"host_summary\":{{\"balance\": {ledger.Balance}, \"entries\": {ledger.Entries}, \"note\": \""));
@@ -41,7 +41,9 @@ static class Protocol
             if (escaped is null) bytes.WriteByte(b);
             else bytes.Write(Encoding.ASCII.GetBytes(escaped));
         }
-        bytes.Write(Encoding.ASCII.GetBytes("\", \"entries_called\": " + entriesCalled + "}}\n"));
+        bytes.Write(Encoding.ASCII.GetBytes("\", \"entries_called\": " + entriesCalled));
+        if (dryPreviewCalls.HasValue) bytes.Write(Encoding.ASCII.GetBytes(", \"dry_preview_calls\": " + dryPreviewCalls.Value));
+        bytes.Write(Encoding.ASCII.GetBytes("}}\n"));
         bytes.Position = 0;
         bytes.CopyTo(Console.OpenStandardOutput());
     }

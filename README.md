@@ -15,6 +15,10 @@ parts through one Host, Context and Ledger. `@item` entries run for each existin
 Money handle and `@total` entries run for Shop.total(); other annotations do not run.
 Non-void HALT results still print `entry NAME = VALUE`; `entries_called` remains
 separate from ledger records. Negative ledger balance fails application validation.
+The adapter reads invocation mode before constructing `Host` and copies it to
+`Context`. Dry setup does not seed live shop items. The explicit `money` previews
+and regular-file path read may run; `Ledger.record` and `file_write` use the safe
+default and are skipped. The dry sentinel gate checks those boundaries.
 [Shop.cs](src/Shop.cs) owns domain objects through the host Context.
 
 ## Invocation result protocol
@@ -65,16 +69,17 @@ half away from zero to int64 cents.
 ## Build and verification
 
 Use .NET 8, Node 24, Python 3 and an LMScript compiler built from mono main
-**0bc80277 or later** with the block/out/return cutover. Published compiler
-0.2.448 predates those changes. Source builds may report the historical 0.2.38
-package version; actual compiler capabilities and source SHA are authoritative.
+**1e03d78b or later** with the program/run_lmcode and dry-mode APIs, or the tested
+published compiler 0.2.450. Source builds may report the historical 0.2.38 package
+version; actual compiler capabilities and source SHA are authoritative.
 Set `LMSCRIPT_BIN` to the source-built `lmscript/bin/lmscript`, then run
 `./test.sh`. It forwards to the LMScript test driver.
 
 The gate verifies SDK/suite locks, builds the managed host, audits all **206 std
 and 45 host signatures**, reproduces all **123 bytecode cases**, runs the shared
-runner/frame-oracle controls, and checks exact output/exit/error bytes for every
-case. Local annotated, text-template and raw-note-byte examples are also checked.
+runner/frame-oracle controls, the offline dry/real sentinel and preview-count suite,
+and checks exact output/exit/error bytes for every case. Local annotated,
+text-template and raw-note-byte examples are also checked.
 Production-copy C# mutations must compile, then fail independent frame/result
 oracles; compilation errors, signals and unexpected exits do not count as catches.
 

@@ -16,10 +16,11 @@ sealed class Ledger
 
 sealed class Host
 {
-    public readonly Registry Registry = new(); // Default string/math/collection/file catalog.
-    public readonly Context Context = new();
-    public readonly Shop Shop = new();
-    public readonly Ledger Ledger = new();
+    public readonly Registry Registry;
+    public readonly Context Context;
+    public readonly Shop Shop;
+    public readonly Ledger Ledger;
+    public int DryMoneyPreviewCalls { get; private set; }
 
     private Value Money(long cents) => Value.Object("Money", Context.Insert("Money", new Money(cents)));
     private static Value Text(string text) => Value.Str(VmString.FromString(text));
@@ -46,29 +47,41 @@ sealed class Host
     }
     public Value TotalHandle() => Total(Context, Shop);
 
-    public Host()
+    public Host(InvocationResults? invocation)
     {
+        // The invocation mode is known before host/catalog/domain setup begins.
+        Context = new Context();
+        invocation?.ApplyMode(Context);
+        bool dry = invocation?.Dry ?? false;
+        Registry = new Registry(); // Default string/math/collection/file catalog.
+        Shop = new Shop();
+        Ledger = new Ledger();
         Registry.Context("shop", "Shop").Context("ledger", "Ledger");
         Context.SetObject("shop", "Shop", Shop);
         Context.SetObject("ledger", "Ledger", Ledger);
         ObjRef items = Context.Insert("Items", Shop.Items);
-        foreach (long cents in new long[] { 125, 250, 375 }) Shop.Items.Values.Add(Money(cents).AsObj());
+        // The live shop fixture is setup data. A dry host keeps an empty local
+        // collection so rule selection cannot accidentally inspect live items.
+        if (!dry)
+            foreach (long cents in new long[] { 125, 250, 375 }) Shop.Items.Values.Add(Money(cents).AsObj());
         TestingCatalog.RegisterTesting(Registry); // Explicit opt-in: raw-byte print and assert_close.
         Conversions.Register(Registry);
 
         // A parameter tuple identifies an overload; int prices are cents, floats are units.
-        Registry.Function("money", ["int"], "Money", (_, a) => Money(a[0].AsInt()));
-        Registry.Function("money", ["float"], "Money", (_, a) => Units(a[0].AsFloat()));
+        Registry.Function("money", ["int"], "Money", (_, a) => Money(a[0].AsInt()), Registry.Dry((_, a) => { DryMoneyPreviewCalls++; return Money(a[0].AsInt()); }));
+        Registry.Function("money", ["float"], "Money", (_, a) => Units(a[0].AsFloat()), Registry.Dry((_, a) => { DryMoneyPreviewCalls++; return Units(a[0].AsFloat()); }));
         Registry.Function("fee", ["int"], "int", (_, a) => Value.Int(unchecked(a[0].AsInt() + 5)));
-        Registry.Function("sample_tmp", [], "string", (_, _) =>
+        Func<Context, Value[], Value> sampleTmp = (_, _) =>
         {
             string? path = Environment.GetEnvironmentVariable("SAMPLE_TMP");
             if (string.IsNullOrEmpty(path)) throw Error.Host("SAMPLE_TMP is required");
             return Text(path);
-        });
+        };
+        Registry.Function("sample_tmp", [], "string", sampleTmp, Registry.Dry(sampleTmp));
 
         // Method callbacks receive Context, receiver handle and ordered tagged arguments.
-        Registry.Method("Money", "amount", [], "int", (c, self, _) => Value.Int(GetMoney(c, self).Cents));
+        Func<Context, ObjRef, Value[], Value> moneyAmount = (c, self, _) => Value.Int(GetMoney(c, self).Cents);
+        Registry.Method("Money", "amount", [], "int", moneyAmount, Registry.Dry(moneyAmount));
         Registry.Method("Money", "currency", [], "Currency", (c, self, _) => { GetMoney(c, self); return Text("USD"); }); // String-backed enum.
         Registry.Method("Money", "plus", ["Money"], "Money", (c, self, a) => Money(unchecked(GetMoney(c, self).Cents + GetMoney(c, a[0].AsObj()).Cents)));
         Registry.Method("Money", "minus", ["Money"], "Money", (c, self, a) => Money(unchecked(GetMoney(c, self).Cents - GetMoney(c, a[0].AsObj()).Cents)));

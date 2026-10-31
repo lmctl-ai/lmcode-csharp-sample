@@ -16,11 +16,11 @@ def main():
     host = Path(sys.argv[1]).resolve()
     source = (ROOT / "src/Program.cs").read_text()
     mutants = (
-        ("stale-bare-frame", 'return results.WriteFrame(Console.OpenStandardOutput());',
-         'Console.WriteLine("{\\"ok\\":true,\\"result\\":null}"); return 0;'),
-        ("missing-part", "results.Complete(part.Index);", "/* omitted completion */"),
-        ("duplicate-part", "results.Select(part.Index, host.Registry, contract);",
-         "results.Select(0, host.Registry, contract);"),
+        ("stale-bare-frame", 'if (!failed) Protocol.HostSummary(host.Ledger, entriesCalled, invocation.Dry ? host.DryMoneyPreviewCalls : null);\n    return invocation.WriteFrame(Console.OpenStandardOutput());',
+         'if (!failed) Protocol.HostSummary(host.Ledger, entriesCalled, invocation.Dry ? host.DryMoneyPreviewCalls : null);\n    return 0;'),
+        ("missing-part", "invocation.Complete(part.Index);", "/* omitted completion */"),
+        ("duplicate-part", "invocation.Select(part.Index, host.Registry, host.Context, contract);",
+         "invocation.Select(0, host.Registry, host.Context, contract);"),
         ("argv-loss", "priorities.Add(flag == \"--first\" ? 0 : flag == \"--last\" ? 2 : 1);",
          "priorities.Add(1);"),
     )
