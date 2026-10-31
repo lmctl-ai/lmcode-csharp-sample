@@ -28,11 +28,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-24.04, label: linux-x64}
-          - {os: ubuntu-24.04-arm, label: linux-arm64}
-          - {os: macos-15, label: macos-arm64}
-          - {os: macos-15-intel, label: macos-x64}
-          - {os: windows-2022, label: windows-x64}
+          - {os: ubuntu-24.04, label: linux-x64, rid: linux-x64}
+          - {os: ubuntu-24.04-arm, label: linux-arm64, rid: linux-arm64}
+          - {os: macos-15, label: macos-arm64, rid: osx-arm64}
+          - {os: macos-15-intel, label: macos-x64, rid: osx-x64}
+          - {os: windows-2022, label: windows-x64, rid: win-x64}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     defaults:
@@ -61,5 +61,8 @@ jobs:
           echo "$RUNNER_TEMP/lmctl/node_modules/.bin" >> "$GITHUB_PATH"
           echo "Using @lmctl-ai/lmctl@$version"
       - name: Run the complete sample suite
+        env:
+          RUN_NATIVE: '1'
+          RUNTIME_ID: ${{ matrix.rid }}
         run: ./test.sh
 
