@@ -5,7 +5,6 @@ namespace LmCode.Stdlib;
 /// <summary>Optional host functions; merge the matching fragment into the host schema.</summary>
 public static class StringCatalog
 {
-    private const int MaxBytes = 64 * 1024 * 1024;
     public static long StrLen(VmString s) => s.Length;
     public static bool StrStartsWith(VmString s, VmString prefix) => s.Span.StartsWith(prefix.Span);
     public static bool StrEndsWith(VmString s, VmString suffix) => s.Span.EndsWith(suffix.Span);
@@ -30,10 +29,7 @@ public static class StringCatalog
     public static VmString StrReplace(VmString s, VmString from, VmString to)
     {
         if (from.Length == 0)
-        {
-            if (s.Length > MaxBytes) throw Error.Host("str_replace: result must be at most 67108864 bytes");
             return s;
-        }
         long resultSize = 0;
         int at = 0;
         while (true)
@@ -71,9 +67,12 @@ public static class StringCatalog
     public static VmString StrRepeat(VmString s, long count)
     {
         if (s.Length == 0 && count >= 0) return new VmString([]);
-        if (count < 0 || (s.Length > 0 && (ulong)count > (ulong)(MaxBytes / s.Length)))
-            throw Error.Host("str_repeat: count must be nonnegative and result at most 67108864 bytes");
-        int resultLength = checked((int)(s.Length * count));
+        if (count < 0) throw Error.Host("str_repeat: count must be nonnegative");
+        long resultSize;
+        try { resultSize = checked((long)s.Length * count); }
+        catch (OverflowException) { throw Error.Host("str_repeat: result size overflows"); }
+        if (resultSize > Array.MaxLength) throw Error.Host("str_repeat: result exceeds platform byte-array limit");
+        int resultLength = (int)resultSize;
         var result = new byte[resultLength];
         for (long i = 0; i < count; ++i) s.Span.CopyTo(result.AsSpan(checked((int)(i * s.Length))));
         return VmString.FromOwned(result);
@@ -86,18 +85,16 @@ public static class StringCatalog
 
     public static bool StrMatch(VmString text, VmString pattern)
     {
-        var work = new GlobWork();
         int t = 0, p = 0, starPattern = -1, starText = 0;
         while (t < text.Length)
         {
-            work.Step();
             int next;
             if (p < pattern.Length && pattern.Span[p] == (byte)'*') { starPattern = p++; starText = t; }
-            else if (p < pattern.Length && GlobToken(pattern.Span, p, text.Span[t], out next, ref work)) { p = next; ++t; }
+            else if (p < pattern.Length && GlobToken(pattern.Span, p, text.Span[t], out next)) { p = next; ++t; }
             else if (starPattern >= 0) { p = starPattern + 1; t = ++starText; }
             else return false;
         }
-        while (p < pattern.Length && pattern.Span[p] == (byte)'*') { work.Step(); ++p; }
+        while (p < pattern.Length && pattern.Span[p] == (byte)'*') ++p;
         return p == pattern.Length;
     }
 
@@ -139,8 +136,9 @@ public static class StringCatalog
 
     private static void AddReplaceSize(ref long size, int amount)
     {
+        if (amount < 0 || size > Array.MaxLength - (long)amount)
+            throw Error.Host("str_replace: result exceeds platform byte-array limit");
         size += amount;
-        if (size > MaxBytes) throw Error.Host("str_replace: result must be at most 67108864 bytes");
     }
 
     private static bool TryParseInt(ReadOnlySpan<byte> bytes, out long value)
@@ -191,17 +189,7 @@ public static class StringCatalog
         return parsed && (value != 0.0 || !nonzero) && double.IsFinite(value);
     }
 
-    private struct GlobWork
-    {
-        private long steps;
-        public void Step()
-        {
-            if (steps == 1L << 27) throw Error.Host("str_match: pattern exceeds the 2^27 work limit");
-            ++steps;
-        }
-    }
-
-    private static bool GlobToken(ReadOnlySpan<byte> pattern, int i, byte c, out int next, ref GlobWork work)
+    private static bool GlobToken(ReadOnlySpan<byte> pattern, int i, byte c, out int next)
     {
         if (pattern[i] == (byte)'\\' && i + 1 < pattern.Length) { next = i + 2; return pattern[i + 1] == c; }
         if (pattern[i] == (byte)'?') { next = i + 1; return true; }
@@ -211,7 +199,6 @@ public static class StringCatalog
             int first = q; bool hit = false;
             while (q < pattern.Length && (pattern[q] != (byte)']' || q == first))
             {
-                work.Step();
                 byte lo = GlobByte(pattern, ref q);
                 if (q + 1 < pattern.Length && pattern[q] == (byte)'-' && pattern[q + 1] != (byte)']')
                 {

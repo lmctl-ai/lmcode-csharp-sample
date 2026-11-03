@@ -1,7 +1,7 @@
 namespace LmCode;
 internal sealed record Binding(string Name, string? TypeName, string[] Parameters, string Returns,
     Func<Context, Value[], Value>? Function, Func<Context, ObjRef, Value[], Value>? Method,
-    Func<Context, Value[], Value>? DryFunction, Func<Context, ObjRef, Value[], Value>? DryMethod);
+    Func<Context, Value[], Value>? DryFunction, Func<Context, ObjRef, Value[], Value>? DryMethod, bool ResultConversion = false);
 public sealed class Registry
 {
     public readonly record struct DryFunctionSlot(Func<Context, Value[], Value> Callback);
@@ -45,7 +45,7 @@ public sealed class Registry
         // run-owned state changes are safe previews; the two file writers opt out below.
         if (registeringBuiltins && type is null && name is not ("file_write" or "file_append")) dryFunction ??= function;
         if (registeringBuiltins && type is not null) dryMethod ??= method;
-        bindings.Add(canonical, new(name, type, (string[])parameters.Clone(), returns, function, method, dryFunction, dryMethod));
+        bindings.Add(canonical, new(name, type, (string[])parameters.Clone(), returns, function, method, dryFunction, dryMethod, registeringBuiltins && type is null && name is ("lmcode_return_set" or "lmcode_return_put")));
         if (registeringBuiltins) builtins.Add(canonical);
         return this;
     }

@@ -45,7 +45,7 @@ jobs:
           RUN_NATIVE: '1'
           RUNTIME_ID: ${{ matrix.rid }}
         run: |
-          lmscript --no-preflight test.lms
+          lmscript test.lms
           [[ "$(artifacts/native/lmcode-csharp-sample --version | tr -d '\r')" == "lmcode-csharp-sample $SAMPLE_VERSION" ]]
           mkdir -p dist
           cp 'artifacts/native/lmcode-csharp-sample${{ matrix.ext }}' 'dist/lmcode-csharp-sample-${{ matrix.label }}${{ matrix.ext }}'

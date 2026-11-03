@@ -60,7 +60,11 @@ public sealed class Context
     private bool dry;
     public bool Dry => dry;
     internal void SetDry(bool value) => dry = value;
-    public ObjRef Insert(string type, object value) { var r = new ObjRef(objects.Count); objects.Add(value); types.Add(type); return r; }
+    public ObjRef Insert(string type, object value) {
+        // Reserve both tables before committing a live handle.
+        objects.EnsureCapacity(checked(objects.Count + 1)); types.EnsureCapacity(checked(types.Count + 1));
+        var r = new ObjRef(objects.Count); objects.Add(value); types.Add(type); return r;
+    }
     public void Set(string name, ObjRef obj) => names[name] = obj;
     public ObjRef SetObject(string name, string type, object value) { var r = Insert(type, value); Set(name, r); return r; }
     public ObjRef? Lookup(string name) => names.TryGetValue(name, out var r) ? r : null;
@@ -71,6 +75,8 @@ public sealed class Context
     public int Count => objects.Count;
     internal ObjRef InsertCollection(string type, object value)
     {
+        // Unwinding a failed allocation must never grow the free-slot stack.
+        freeCollectionSlots.EnsureCapacity(checked(objects.Count + 1));
         if (!freeCollectionSlots.TryPop(out int index)) return Insert(type, value);
         objects[index] = value; types[index] = type; return new ObjRef(index);
     }

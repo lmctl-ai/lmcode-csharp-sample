@@ -12,20 +12,20 @@ if (env("RUNNER_OS") == "Windows") { python = "python"; }
 step([python, "-B", "scripts/sync.py", "check"]);
 step([python, "-B", "sample-suite/test_return_protocol.py"]);
 step(["dotnet", "build", "src/LmCode.Sample.csproj", "-c", "Release", "--nologo"]);
-step(concat(compiler_command(), ["--no-preflight", "sample-suite/audit.lms", "--std", "std/lmcode-std.schema.json"]));
-step(concat(compiler_command(), ["--no-preflight", "sample-suite/check-recompile.lms"]));
-step(concat(compiler_command(), ["--no-preflight", "sample-suite/test-runner.lms"]));
+step(concat(compiler_command(), ["sample-suite/audit.lms", "--std", "std/lmcode-std.schema.json"]));
+step(concat(compiler_command(), ["sample-suite/check-recompile.lms"]));
+step(concat(compiler_command(), ["sample-suite/test-runner.lms"]));
 
 fn check_host(host) {
   step(concat([python, "-B", "scripts/test-dry-host.py"], host));
-  step(concat(compiler_command(), concat(["--no-preflight", "sample-suite/run-suite.lms"], host)));
-  step(concat(compiler_command(), concat(["--no-preflight", path_join(Directory, "examples/rule-entries.lms")], host)));
-  note_command = concat(compiler_command(), concat(["--no-preflight", path_join(Directory, "scripts/check-note-bytes.lms")], host));
+  step(concat(compiler_command(), concat(["sample-suite/run-suite.lms"], host)));
+  step(concat(compiler_command(), concat([path_join(Directory, "examples/rule-entries.lms")], host)));
+  note_command = concat(compiler_command(), concat([path_join(Directory, "scripts/check-note-bytes.lms")], host));
   note_result = invoke(suite_root(), note_command, [], {"note.bin":"00080c090d0a225cffc3a9"}, 30000);
   note_expected = "7b22686f73745f73756d6d617279223a7b2262616c616e6365223a20302c2022656e7472696573223a20302c20226e6f7465223a20225c75303030305c75303030385c75303030635c745c725c6e5c225c5cffc3a9222c2022656e74726965735f63616c6c6564223a20307d7d0a4c4d434f44455f52455455524e5f424547494e0a7b226f6b223a747275652c22726573756c74223a6e756c6c7d0a4c4d434f44455f52455455524e5f454e440a";
   assert(note_result.code == 0 && note_result.stderr_hex == "" && note_result.stdout == note_expected + "\n", "note bytes differ");
   println("PASS note bytes: NUL, JSON escapes, invalid UTF-8 and multibyte UTF-8");
-  step(concat(compiler_command(), concat(["--no-preflight", path_join(Directory, "examples/text-template.lms")], host)));
+  step(concat(compiler_command(), concat([path_join(Directory, "examples/text-template.lms")], host)));
   println("PASS annotated interface and text-template examples");
 }
 managed_host = ["dotnet", path_join(Directory, "src/bin/Release/net8.0/lmcode-csharp-sample.dll")];
