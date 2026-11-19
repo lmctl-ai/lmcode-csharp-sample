@@ -1,5 +1,7 @@
 # lmcode C# shop sample
 
+Documentation: [Quick reference](https://www.lmctl.com/tools/lmcode-csharp-sample/) | [LLM skill](https://www.lmctl.com/tools/lmcode-csharp-sample/skill.html) | [Guide](https://www.lmctl.com/tools/lmcode-csharp-sample/guide.html) | [Reference](https://www.lmctl.com/tools/lmcode-csharp-sample/reference.html)
+
 ## Purpose
 
 This .NET 8 host embeds the checked-in [C# runtime](vendor/lmcode-csharp) and
